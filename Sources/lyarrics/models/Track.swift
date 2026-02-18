@@ -7,12 +7,11 @@ struct Track: Codable {
     let fileLyricName: String?
     let title: String
     let artist: String
-    let album: String?
+    let album: String
     let duration: Double
     let trackNumber: Int?
     let lyrics: String?
     let instrumental: Bool
     let isSyncedLyrics: Bool
     let lastModified: Date
-    let fileHash: String?
 }

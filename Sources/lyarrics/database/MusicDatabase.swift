@@ -15,16 +15,15 @@ class MusicDatabase {
     private let fileLyricName = Expression<String?>("file_lyric_name")
     private let title = Expression<String>("title")
     private let artist = Expression<String>("artist")
-    private let album = Expression<String?>("album")
+    private let album = Expression<String>("album")
     private let duration = Expression<Double>("duration")
     private let trackNumber = Expression<Int?>("track_number")
     private let lyrics = Expression<String?>("lyrics")
     private let isSyncedLyrics = Expression<Bool>("is_synced_lyrics")
     private let instrumental = Expression<Bool>("instrumental")
     private let lastModified = Expression<Date>("last_modified")
-    private let fileHash = Expression<String?>("file_hash")
 
-    init(dbPath: String = "\(NSHomeDirectory())/.music_search/library.db") throws {
+    init(dbPath: String = "\(NSHomeDirectory())/.lyarrics/library.db") throws {
         // Create directory if needed
         let dbURL = URL(fileURLWithPath: dbPath)
         try FileManager.default.createDirectory(
@@ -53,7 +52,6 @@ class MusicDatabase {
             t.column(instrumental)
             t.column(lastModified)
             t.column(isSyncedLyrics)
-            t.column(fileHash)
         })
         
         // Create indexes for fast searching
@@ -85,8 +83,7 @@ extension MusicDatabase {
             lyrics <- song.lyrics,
             instrumental <- song.instrumental,
             isSyncedLyrics <- song.isSyncedLyrics,
-            lastModified <- song.lastModified,
-            fileHash <- song.fileHash
+            lastModified <- song.lastModified
         )
         
         try db.run(insert)
@@ -116,8 +113,7 @@ extension MusicDatabase {
                 lyrics: row[lyrics],
                 instrumental: row[instrumental],
                 isSyncedLyrics: row[isSyncedLyrics],
-                lastModified: row[lastModified],
-                fileHash: row[fileHash]
+                lastModified: row[lastModified]
             ))
         }
         
@@ -147,8 +143,7 @@ extension MusicDatabase {
                 lyrics: row[lyrics],
                 instrumental: row[instrumental],
                 isSyncedLyrics: row[isSyncedLyrics],
-                lastModified: row[lastModified],
-                fileHash: row[fileHash]
+                lastModified: row[lastModified]
             )
         }
         
@@ -179,8 +174,7 @@ extension MusicDatabase {
                 lyrics: row[lyrics],
                 instrumental: row[instrumental],
                 isSyncedLyrics: row[isSyncedLyrics],
-                lastModified: row[lastModified],
-                fileHash: row[fileHash]
+                lastModified: row[lastModified]
             ))
         }
 
@@ -227,8 +221,7 @@ extension MusicDatabase {
                 lyrics: row[lyrics],
                 instrumental: row[instrumental],
                 isSyncedLyrics: row[isSyncedLyrics],
-                lastModified: row[lastModified],
-                fileHash: row[fileHash]
+                lastModified: row[lastModified]
             ))
         }
         

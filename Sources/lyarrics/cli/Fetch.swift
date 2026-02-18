@@ -16,15 +16,28 @@ struct Fetch: AsyncParsableCommand {
     @Flag(name: .long, help: "Show what would be fetched without writing files or updating the database")
     var dryRun: Bool = false
 
+    @Option(name: .long, help: "Maximum number of retries for transient errors")
+    var maxRetries: Int = 3
+
+    @Option(name: .long, help: "Delay in milliseconds between API requests")
+    var delay: Int = 500
+
+    @Flag(name: .long, help: "Rescan library for any changes before fetching lyrics")
+    var scan: Bool = false
+
     func run() async throws {
         let logger = Self.logger
 
         let database = try MusicDatabase()
         let musicDirectory = URL(fileURLWithPath: path)
-        let scanner = LibraryScanner(musicDirectory: musicDirectory, database: database)
 
-        logger.info("Scanning library at \(path, privacy: .public)")
-        // try scanner.scanLibrary()
+        if scan {
+            let scanner = LibraryScanner(musicDirectory: musicDirectory, database: database)
+
+            logger.info("Scanning library at \(path, privacy: .public)")
+            try scanner.scanLibrary()
+            logger.info("Scan complete")
+        }
 
         let songsNeedingLyrics = try database.getSongsNeedingLyrics()
         logger.info("Found \(songsNeedingLyrics.count, privacy: .public) songs needing lyrics")
@@ -43,12 +56,14 @@ struct Fetch: AsyncParsableCommand {
             let song = Song(
                 track: LRCLib.Track(track.title),
                 artist: Artist(track.artist),
-                album: Album(track.album ?? ""),
+                album: Album(track.album),
                 duration: Duration(Int(track.duration))
             )
 
+            try await Task.sleep(nanoseconds: UInt64(delay) * 1_000_000)
+
             do {
-                let record: Record = try await lrc.getLyrics(song: song)
+                let record: Record = try await fetchWithRetry(client: lrc, song: song, logger: logger)
 
                 if let syncedLyricsContent = record.syncedLyrics {
                     let trackURL = URL(fileURLWithPath: track.fileTrackPath)
@@ -121,5 +136,20 @@ struct Fetch: AsyncParsableCommand {
         }
 
         logger.info("Fetch complete. Fetched: \(fetched, privacy: .public), Failed: \(failed, privacy: .public)")
+    }
+
+    private func fetchWithRetry(client: LRCLibClient, song: Song, logger: Logger) async throws -> Record {
+        var lastError: Error?
+        for attempt in 1...maxRetries {
+            do {
+                return try await client.getLyrics(song: song)
+            } catch let error where !(error is LRCError) {
+                lastError = error
+                let backoff = UInt64(attempt) * UInt64(delay) * 1_000_000
+                logger.warning("Transient error (attempt \(attempt, privacy: .public)/\(maxRetries, privacy: .public)), retrying in \(attempt * delay, privacy: .public)ms: \(error.localizedDescription, privacy: .public)")
+                try await Task.sleep(nanoseconds: backoff)
+            }
+        }
+        throw lastError!
     }
 }

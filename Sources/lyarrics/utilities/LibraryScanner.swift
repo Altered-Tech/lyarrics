@@ -16,6 +16,11 @@ class LibraryScanner {
         logger.info("Starting library scan at \(self.musicDirectory.path, privacy: .public)")
         var count: Int = 0
         let fileManager = FileManager.default
+        if !fileManager.directoryExists(atPath: musicDirectory.path()) {
+            logger.error("Provided path does not exist.")
+            throw TrackError.pathNotFound("Provided path does not exist: \(musicDirectory.absoluteString)")
+        }
+        
         let enumerator = fileManager.enumerator(
             at: musicDirectory,
             includingPropertiesForKeys: [.contentModificationDateKey],
@@ -147,8 +152,7 @@ class LibraryScanner {
             lyrics: lyrics,
             instrumental: false,
             isSyncedLyrics: isSynced,
-            lastModified: Date(),
-            fileHash: nil
+            lastModified: Date()
         )
 
         return track

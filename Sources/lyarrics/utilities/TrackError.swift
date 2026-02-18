@@ -6,4 +6,5 @@ enum TrackError: Error {
     case noMetadata(String)
     case executableNotFound(String)
     case fileNotFound(String)
+    case pathNotFound(String)
 }
