@@ -35,7 +35,7 @@ struct Fetch: AsyncParsableCommand {
             let scanner = LibraryScanner(musicDirectory: musicDirectory, database: database)
 
             logger.info("Scanning library at \(path, privacy: .public)")
-            try scanner.scanLibrary()
+            try await scanner.scanLibrary()
             logger.info("Scan complete")
         }
 

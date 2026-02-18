@@ -16,7 +16,7 @@ struct Scan: AsyncParsableCommand {
         let musicDirectory = URL(fileURLWithPath: path)
         let scanner = LibraryScanner(musicDirectory: musicDirectory, database: database)
         do {
-            try scanner.scanLibrary()
+            try await scanner.scanLibrary()
             print("Scan Complete")
         } catch TrackError.fileNotFound(let path) {
             print("File not found at \(path)")
