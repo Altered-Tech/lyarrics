@@ -198,6 +198,46 @@ extension MusicDatabase {
         ))
     }
 
+    func getAllPathsAndDates() throws -> [String: Date] {
+        guard let db = db else {
+            logger.error("Database connection is nil")
+            return [:]
+        }
+        var result: [String: Date] = [:]
+        for row in try db.prepare(songs.select(fileTrackPath, lastModified)) {
+            result[row[fileTrackPath]] = row[lastModified]
+        }
+        return result
+    }
+
+    func insertOrUpdateSongs(_ tracks: [Track]) throws {
+        guard let db = db else {
+            logger.error("Database connection is nil")
+            return
+        }
+        try db.transaction {
+            for song in tracks {
+                let insert = songs.insert(
+                    or: .replace,
+                    fileTrackPath <- song.fileTrackPath,
+                    fileTrackName <- song.fileTrackName,
+                    fileLyricPath <- song.fileLyricPath,
+                    fileLyricName <- song.fileLyricName,
+                    title <- song.title,
+                    artist <- song.artist,
+                    album <- song.album,
+                    duration <- song.duration,
+                    trackNumber <- song.trackNumber,
+                    lyrics <- song.lyrics,
+                    instrumental <- song.instrumental,
+                    isSyncedLyrics <- song.isSyncedLyrics,
+                    lastModified <- song.lastModified
+                )
+                try db.run(insert)
+            }
+        }
+    }
+
     func getAllSongs() throws -> [Track] {
         guard let db = db else {
             logger.error("Database connection is nil")
