@@ -144,7 +144,8 @@ final class LibraryScanner: @unchecked Sendable {
             "-v", "quiet",
             "-print_format", "json",
             "-probesize", "100000",  // Read at most 100KB to probe the container (default is 5MB)
-            "-show_format",          // Tags and duration live in the format header, not streams
+            "-show_format",
+            "-show_streams",         // OGG/Vorbis stores tags at stream level, not format level
             path
         ]
 
@@ -163,8 +164,16 @@ final class LibraryScanner: @unchecked Sendable {
         pipe.fileHandleForReading.closeFile()
 
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let format = json["format"] as? [String: Any],
-              let tags = format["tags"] as? [String: Any] else {
+              let format = json["format"] as? [String: Any] else {
+            throw TrackError.noMetadata(path)
+        }
+
+        // Tags may be at format level (MP3, M4A) or stream level (OGG/Vorbis, some FLAC)
+        let formatTags = format["tags"] as? [String: Any]
+        let streamTags = (json["streams"] as? [[String: Any]])?.first(where: {
+            ($0["codec_type"] as? String) == "audio"
+        })?["tags"] as? [String: Any]
+        guard let tags = formatTags ?? streamTags else {
             throw TrackError.noMetadata(path)
         }
 
