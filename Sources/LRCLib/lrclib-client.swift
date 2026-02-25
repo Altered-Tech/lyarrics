@@ -3,7 +3,7 @@ import OpenAPIAsyncHTTPClient
 import OpenAPIRuntime
 import Foundation
 
-public struct LRCLibClient {
+public struct LRCLibClient: @unchecked Sendable {
 
     private let userAgent: String = "Lyarrics/0.0.0 (testing)"
 
