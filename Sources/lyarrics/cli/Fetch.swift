@@ -1,7 +1,7 @@
 import ArgumentParser
 import LRCLib
 import Foundation
-import os
+import Logging
 
 // MARK: - Rate Limiter
 
@@ -50,7 +50,7 @@ struct Fetch: AsyncParsableCommand {
         abstract: "Fetch lyrics from the command line"
     )
 
-    private static let logger = Logger(subsystem: "com.lyarrics", category: "Fetch")
+    private static let logger = Logger(label: "com.lyarrics.Fetch")
 
     @Argument(help: "The path to scan")
     var path: String
@@ -78,13 +78,13 @@ struct Fetch: AsyncParsableCommand {
 
         if scan {
             let scanner = LibraryScanner(musicDirectory: musicDirectory, database: database)
-            logger.info("Scanning library at \(path, privacy: .public)")
+            logger.info("Scanning library at \(path)")
             try await scanner.scanLibrary()
             logger.info("Scan complete")
         }
 
         let songsNeedingLyrics = try database.getSongsNeedingLyrics()
-        logger.info("Found \(songsNeedingLyrics.count, privacy: .public) songs needing lyrics")
+        logger.info("Found \(songsNeedingLyrics.count) songs needing lyrics")
 
         if dryRun {
             logger.info("Dry run enabled, no files will be written or database updated")
@@ -121,7 +121,7 @@ struct Fetch: AsyncParsableCommand {
                             lyricName: lrcURL.lastPathComponent
                         )
                     }
-                    logger.info("[syncd] \(track.artist, privacy: .public) - \(track.title, privacy: .public) -> \(lrcURL.lastPathComponent, privacy: .public)")
+                    logger.info("[syncd] \(track.artist) - \(track.title) -> \(lrcURL.lastPathComponent)")
                     fetched += 1
 
                 case .plain(let content, let lrcURL, let isInstrumental):
@@ -136,7 +136,7 @@ struct Fetch: AsyncParsableCommand {
                             lyricName: lrcURL.lastPathComponent
                         )
                     }
-                    logger.info("[plain] \(track.artist, privacy: .public) - \(track.title, privacy: .public) -> \(lrcURL.lastPathComponent, privacy: .public)")
+                    logger.info("[plain] \(track.artist) - \(track.title) -> \(lrcURL.lastPathComponent)")
                     fetched += 1
 
                 case .instrumental:
@@ -150,26 +150,26 @@ struct Fetch: AsyncParsableCommand {
                             lyricName: nil
                         )
                     }
-                    logger.info("[instrumental] \(track.artist, privacy: .public) - \(track.title, privacy: .public)")
+                    logger.info("[instrumental] \(track.artist) - \(track.title)")
                     fetched += 1
 
                 case .noLyrics:
-                    logger.warning("[none] \(track.artist, privacy: .public) - \(track.title, privacy: .public)")
+                    logger.warning("[none] \(track.artist) - \(track.title)")
                     fetched += 1
 
                 case .notFound:
-                    logger.warning("Not found on LRCLIB: \(track.artist, privacy: .public) - \(track.title, privacy: .public)")
+                    logger.warning("Not found on LRCLIB: \(track.artist) - \(track.title)")
                     failed += 1
 
                 case .apiError(let code):
-                    logger.error("LRCLIB error \(code, privacy: .public) for: \(track.artist, privacy: .public) - \(track.title, privacy: .public)")
+                    logger.error("LRCLIB error \(code) for: \(track.artist) - \(track.title)")
                     failed += 1
 
                 case .decodingError(let description):
-                    logger.error("Decoding error for \(track.artist, privacy: .public) - \(track.title, privacy: .public): \(description, privacy: .public)")
+                    logger.error("Decoding error for \(track.artist) - \(track.title): \(description)")
 
                 case .unknownError(let description):
-                    logger.error("Unknown error for \(track.artist, privacy: .public) - \(track.title, privacy: .public): \(description, privacy: .public)")
+                    logger.error("Unknown error for \(track.artist) - \(track.title): \(description)")
                 }
 
                 // Replenish the pool as each result comes in
@@ -181,7 +181,7 @@ struct Fetch: AsyncParsableCommand {
             }
         }
 
-        logger.info("Fetch complete. Fetched: \(fetched, privacy: .public), Failed: \(failed, privacy: .public)")
+        logger.info("Fetch complete. Fetched: \(fetched), Failed: \(failed)")
     }
 
     // MARK: - Helpers
@@ -196,7 +196,7 @@ struct Fetch: AsyncParsableCommand {
 
         do {
             try await rateLimiter.throttle()
-            logger.debug("Fetching lyrics for: \(track.artist, privacy: .public) - \(track.title, privacy: .public)")
+            logger.debug("Fetching lyrics for: \(track.artist) - \(track.title)")
             let record = try await fetchWithRetry(client: client, song: song, logger: logger)
 
             let trackURL = URL(fileURLWithPath: track.fileTrackPath)
@@ -234,7 +234,7 @@ struct Fetch: AsyncParsableCommand {
             } catch let error where !(error is LRCError) {
                 lastError = error
                 let backoff = UInt64(attempt) * UInt64(delay) * 1_000_000
-                logger.warning("Transient error (attempt \(attempt, privacy: .public)/\(maxRetries, privacy: .public)), retrying in \(attempt * delay, privacy: .public)ms: \(error.localizedDescription, privacy: .public)")
+                logger.warning("Transient error (attempt \(attempt)/\(maxRetries)), retrying in \(attempt * delay)ms: \(error.localizedDescription)")
                 try await Task.sleep(nanoseconds: backoff)
             }
         }

@@ -17,7 +17,8 @@ let package = Package(
         .package(url: "https://github.com/swift-server/swift-openapi-hummingbird.git", from: "2.0.0"),
         .package(url: "https://github.com/swift-server/swift-openapi-async-http-client", from: "1.0.0"),
         .package(url: "https://github.com/apple/swift-nio", from: "2.86.0"),
-        .package(url: "https://github.com/stephencelis/SQLite.swift", from: "0.15.5")
+        .package(url: "https://github.com/stephencelis/SQLite.swift.git", branch: "revert-linux-trait"),
+        .package(url: "https://github.com/apple/swift-log", from: "1.6.0")
     ],
     targets: [
         // Targets are the basic building blocks of a package, defining a module or a test suite.
@@ -38,7 +39,8 @@ let package = Package(
                 .product(name: "OpenAPIHummingbird", package: "swift-openapi-hummingbird"),
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
                 .product(name: "_NIOFileSystem", package: "swift-nio"),
-                .product(name: "SQLite", package: "SQLite.swift")
+                .product(name: "SQLite", package: "SQLite.swift"),
+                .product(name: "Logging", package: "swift-log")
             ]
         ),
     ]

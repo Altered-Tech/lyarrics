@@ -1,9 +1,9 @@
 import SQLite
 import Foundation
-import os
+import Logging
 
 class MusicDatabase {
-    private let logger = Logger(subsystem: "com.lyarrics", category: "MusicDatabase")
+    private let logger = Logger(label: "com.lyarrics.MusicDatabase")
     private var db: Connection?
 
     private let songs = Table("songs")
@@ -31,7 +31,7 @@ class MusicDatabase {
             withIntermediateDirectories: true
         )
 
-        logger.info("Opening database at \(dbPath, privacy: .public)")
+        logger.info("Opening database at \(dbPath)")
         db = try Connection(dbPath)
         try createTable()
     }
@@ -67,7 +67,7 @@ extension MusicDatabase {
             logger.error("Database connection is nil")
             return
         }
-        logger.debug("Inserting/updating song: \(song.title, privacy: .public) by \(song.artist, privacy: .public)")
+        logger.debug("Inserting/updating song: \(song.title) by \(song.artist)")
         
         let insert = songs.insert(
             or: .replace,
@@ -94,7 +94,7 @@ extension MusicDatabase {
             logger.error("Database connection is nil")
             return []
         }
-        logger.info("Searching lyrics for: \(query, privacy: .public)")
+        logger.info("Searching lyrics for: \(query)")
         
         let searchQuery = songs.filter(lyrics.like("%\(query)%"))
         var results: [Track] = []
@@ -125,7 +125,7 @@ extension MusicDatabase {
             logger.error("Database connection is nil")
             return nil
         }
-        logger.debug("Looking up song by path: \(path, privacy: .public)")
+        logger.debug("Looking up song by path: \(path)")
         
         let query = songs.filter(fileTrackPath == path).limit(1)
         
@@ -186,7 +186,7 @@ extension MusicDatabase {
             logger.error("Database connection is nil")
             return
         }
-        logger.debug("Updating lyrics for: \(trackPath, privacy: .public)")
+        logger.debug("Updating lyrics for: \(trackPath)")
 
         let song = songs.filter(fileTrackPath == trackPath)
         try db.run(song.update(
