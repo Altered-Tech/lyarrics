@@ -1,19 +1,19 @@
 import Foundation
-import os
+import Logging
 
 final class LibraryScanner: @unchecked Sendable {
-    private let logger = Logger(subsystem: "com.lyarrics", category: "LibraryScanner")
+    private let logger = Logger(label: "com.lyarrics.LibraryScanner")
     private let database: MusicDatabase
     private let musicDirectory: URL
     private var erroredFiles: [String] = []
-    
+
     init(musicDirectory: URL, database: MusicDatabase) {
         self.musicDirectory = musicDirectory
         self.database = database
     }
-    
+
     func scanLibrary() async throws {
-        logger.info("Starting library scan at \(self.musicDirectory.path, privacy: .public)")
+        logger.info("Starting library scan at \(self.musicDirectory.path)")
         let fileManager = FileManager.default
         if !fileManager.directoryExists(atPath: musicDirectory.path()) {
             logger.error("Provided path does not exist.")
@@ -22,13 +22,13 @@ final class LibraryScanner: @unchecked Sendable {
 
         // Pre-load all known paths and their modification dates in one query
         let existingPaths = try database.getAllPathsAndDates()
-        logger.info("Database has \(existingPaths.count, privacy: .public) tracked files")
+        logger.info("Database has \(existingPaths.count) tracked files")
 
         // Enumerate synchronously (enumerator is unavailable from async contexts)
-        logger.info("Enumerating files in \(self.musicDirectory.path, privacy: .public)...")
+        logger.info("Enumerating files in \(self.musicDirectory.path)...")
         let audioFiles = collectFilesToProcess(existingPaths: existingPaths)
         let total = audioFiles.count
-        logger.info("\(total, privacy: .public) files need processing (\(existingPaths.count, privacy: .public) unchanged, skipped)")
+        logger.info("\(total) files need processing (\(existingPaths.count) unchanged, skipped)")
 
         guard total > 0 else {
             logger.info("Nothing to do — library is up to date")
@@ -37,7 +37,7 @@ final class LibraryScanner: @unchecked Sendable {
 
         // Process ffprobe calls in parallel, bounded by processor count
         let maxConcurrency = ProcessInfo.processInfo.processorCount
-        logger.info("Extracting metadata using \(maxConcurrency, privacy: .public) parallel workers")
+        logger.info("Extracting metadata using \(maxConcurrency) parallel workers")
         var tracksToInsert: [Track] = []
         var errors: [String] = []
         var index = 0
@@ -51,12 +51,12 @@ final class LibraryScanner: @unchecked Sendable {
                 index += 1
                 let path = url.path
                 group.addTask { [self] in
-                    logger.info("Reading: \(url.lastPathComponent, privacy: .public)")
+                    logger.info("Reading: \(url.lastPathComponent)")
                     do {
                         let track = try extractMetadata(from: path)
                         return (track, nil, nil)
                     } catch {
-                        logger.error("Error reading \(url.lastPathComponent, privacy: .public): \(error.localizedDescription, privacy: .public)")
+                        logger.error("Error reading \(url.lastPathComponent): \(error.localizedDescription)")
                         return (nil, path, error.localizedDescription)
                     }
                 }
@@ -66,23 +66,23 @@ final class LibraryScanner: @unchecked Sendable {
                 completed += 1
                 if let track = track {
                     tracksToInsert.append(track)
-                    logger.info("[\(completed, privacy: .public)/\(total, privacy: .public)] Done: \(track.artist, privacy: .public) — \(track.title, privacy: .public)")
+                    logger.info("[\(completed)/\(total)] Done: \(track.artist) — \(track.title)")
                 } else if let errorPath = errorPath {
                     errors.append(errorPath)
                     let reason = errorReason ?? "unknown error"
-                    logger.error("[\(completed, privacy: .public)/\(total, privacy: .public)] Failed (\(reason, privacy: .public))")
+                    logger.error("[\(completed)/\(total)] Failed (\(reason))")
                 }
                 if index < total {
                     let url = audioFiles[index]
                     index += 1
                     let path = url.path
                     group.addTask { [self] in
-                        logger.info("Reading: \(url.lastPathComponent, privacy: .public)")
+                        logger.info("Reading: \(url.lastPathComponent)")
                         do {
                             let track = try extractMetadata(from: path)
                             return (track, nil, nil)
                         } catch {
-                            logger.error("Error reading \(url.lastPathComponent, privacy: .public): \(error.localizedDescription, privacy: .public)")
+                            logger.error("Error reading \(url.lastPathComponent): \(error.localizedDescription)")
                             return (nil, path, error.localizedDescription)
                         }
                     }
@@ -91,13 +91,13 @@ final class LibraryScanner: @unchecked Sendable {
         }
 
         // Batch insert all new/changed tracks in a single transaction
-        logger.info("Saving \(tracksToInsert.count, privacy: .public) tracks to database...")
+        logger.info("Saving \(tracksToInsert.count) tracks to database...")
         try database.insertOrUpdateSongs(tracksToInsert)
         erroredFiles = errors
 
-        logger.info("Scan complete — \(tracksToInsert.count, privacy: .public) saved, \(errors.count, privacy: .public) failed")
+        logger.info("Scan complete — \(tracksToInsert.count) saved, \(errors.count) failed")
         for path in erroredFiles {
-            logger.warning("Failed: \(path, privacy: .public)")
+            logger.warning("Failed: \(path)")
         }
     }
 
@@ -108,7 +108,7 @@ final class LibraryScanner: @unchecked Sendable {
             includingPropertiesForKeys: [.contentModificationDateKey],
             options: [.skipsHiddenFiles]
         ) else {
-            logger.warning("Could not create enumerator for \(self.musicDirectory.path, privacy: .public)")
+            logger.warning("Could not create enumerator for \(self.musicDirectory.path)")
             return []
         }
 
@@ -125,10 +125,10 @@ final class LibraryScanner: @unchecked Sendable {
             }
             audioFiles.append(fileURL)
         }
-        logger.info("Enumeration complete — \(audioFiles.count + skipped, privacy: .public) audio files found, \(skipped, privacy: .public) unchanged")
+        logger.info("Enumeration complete — \(audioFiles.count + skipped) audio files found, \(skipped) unchanged")
         return audioFiles
     }
-    
+
     func extractMetadata(from path: String) throws -> Track {
         let fileManager = FileManager.default
         if !fileManager.fileExists(atPath: path) {
