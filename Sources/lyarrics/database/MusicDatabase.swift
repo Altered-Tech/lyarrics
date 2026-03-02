@@ -23,6 +23,9 @@ class MusicDatabase {
     private let instrumental = Expression<Bool>("instrumental")
     private let lastModified = Expression<Date>("last_modified")
 
+    /// For testing only: creates an instance with no database connection.
+    init(nilDatabase _: Void) {}
+
     init(dbPath: String = "\(NSHomeDirectory())/.lyarrics/library.db") throws {
         // Create directory if needed
         let dbURL = URL(fileURLWithPath: dbPath)

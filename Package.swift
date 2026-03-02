@@ -43,5 +43,20 @@ let package = Package(
                 .product(name: "Logging", package: "swift-log")
             ]
         ),
+        .testTarget(
+            name: "LRCLibTests",
+            dependencies: [
+                .target(name: "LRCLib"),
+                .product(name: "OpenAPIRuntime", package: "swift-openapi-runtime"),
+            ]
+        ),
+        .testTarget(
+            name: "lyarricsTests",
+            dependencies: [
+                .target(name: "lyarrics"),
+                .target(name: "LRCLib"),
+                .product(name: "OpenAPIRuntime", package: "swift-openapi-runtime"),
+            ]
+        ),
     ]
 )

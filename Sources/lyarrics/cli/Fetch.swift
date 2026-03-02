@@ -8,7 +8,7 @@ import Logging
 /// Throttles requests by spacing them at least `delay` ms apart.
 /// Uses slot-claiming so concurrent callers each get a unique future slot,
 /// preventing bursts even when multiple tasks call throttle() simultaneously.
-private actor RateLimiter {
+actor RateLimiter {
     private let delaySeconds: Double
     private var lastRequest: Date
 
@@ -32,7 +32,7 @@ private actor RateLimiter {
 
 // MARK: - Fetch Outcome
 
-private enum FetchOutcome: Sendable {
+enum FetchOutcome: Sendable {
     case synced(content: String, lrcURL: URL, isInstrumental: Bool)
     case plain(content: String, lrcURL: URL, isInstrumental: Bool)
     case instrumental
@@ -92,6 +92,24 @@ struct Fetch: AsyncParsableCommand {
 
         let lrc = LRCLibClient()
         let rateLimiter = RateLimiter(milliseconds: delay)
+        let (fetched, failed) = try await process(
+            songsNeedingLyrics: songsNeedingLyrics,
+            database: database,
+            client: lrc,
+            rateLimiter: rateLimiter,
+            logger: logger
+        )
+        logger.info("Fetch complete. Fetched: \(fetched), Failed: \(failed)")
+    }
+
+    @discardableResult
+    func process(
+        songsNeedingLyrics: [Track],
+        database: MusicDatabase,
+        client: LRCLibClient,
+        rateLimiter: RateLimiter,
+        logger: Logger
+    ) async throws -> (fetched: Int, failed: Int) {
         var fetched = 0
         var failed = 0
 
@@ -102,7 +120,7 @@ struct Fetch: AsyncParsableCommand {
             for _ in 0..<min(concurrency, songsNeedingLyrics.count) {
                 guard let track = trackIterator.next() else { break }
                 group.addTask {
-                    await self.fetchTrackOutcome(track: track, client: lrc, rateLimiter: rateLimiter, logger: logger)
+                    await self.fetchTrackOutcome(track: track, client: client, rateLimiter: rateLimiter, logger: logger)
                 }
             }
 
@@ -175,18 +193,18 @@ struct Fetch: AsyncParsableCommand {
                 // Replenish the pool as each result comes in
                 if let next = trackIterator.next() {
                     group.addTask {
-                        await self.fetchTrackOutcome(track: next, client: lrc, rateLimiter: rateLimiter, logger: logger)
+                        await self.fetchTrackOutcome(track: next, client: client, rateLimiter: rateLimiter, logger: logger)
                     }
                 }
             }
         }
 
-        logger.info("Fetch complete. Fetched: \(fetched), Failed: \(failed)")
+        return (fetched, failed)
     }
 
     // MARK: - Helpers
 
-    private func fetchTrackOutcome(track: Track, client: LRCLibClient, rateLimiter: RateLimiter, logger: Logger) async -> (Track, FetchOutcome) {
+    func fetchTrackOutcome(track: Track, client: LRCLibClient, rateLimiter: RateLimiter, logger: Logger) async -> (Track, FetchOutcome) {
         let song = Song(
             track: LRCLib.Track(track.title),
             artist: Artist(track.artist),
@@ -226,7 +244,7 @@ struct Fetch: AsyncParsableCommand {
         }
     }
 
-    private func fetchWithRetry(client: LRCLibClient, song: Song, logger: Logger) async throws -> Record {
+    func fetchWithRetry(client: LRCLibClient, song: Song, logger: Logger) async throws -> Record {
         var lastError: Error?
         for attempt in 1...maxRetries {
             do {

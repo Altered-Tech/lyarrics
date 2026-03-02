@@ -177,6 +177,10 @@ final class LibraryScanner: @unchecked Sendable {
             throw TrackError.noMetadata(path)
         }
 
+        return buildTrack(tags: tags, format: format, path: path)
+    }
+
+    func buildTrack(tags: [String: Any], format: [String: Any], path: String) -> Track {
         // Extract metadata (case-insensitive key matching)
         let title = tags.firstValue(forKeys: ["title", "TITLE"])
             ?? URL(fileURLWithPath: path).deletingPathExtension().lastPathComponent
@@ -204,7 +208,7 @@ final class LibraryScanner: @unchecked Sendable {
             isSynced = false
         }
 
-        let track = Track(
+        return Track(
             fileTrackPath: path,
             fileTrackName: fileName,
             fileLyricPath: lyrics != nil ? lrcPath.path : nil,
@@ -219,8 +223,6 @@ final class LibraryScanner: @unchecked Sendable {
             isSyncedLyrics: isSynced,
             lastModified: Date()
         )
-
-        return track
     }
 
     func loadLyrics(for audioPath: String, extension ext: String) -> String? {
