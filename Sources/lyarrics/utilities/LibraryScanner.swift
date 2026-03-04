@@ -12,7 +12,7 @@ final class LibraryScanner: @unchecked Sendable {
         self.database = database
     }
 
-    func scanLibrary() async throws {
+    func scanLibrary(onProgress: ((Int, Int) -> Void)? = nil) async throws {
         logger.info("Starting library scan at \(self.musicDirectory.path)")
         let fileManager = FileManager.default
         if !fileManager.directoryExists(atPath: musicDirectory.path()) {
@@ -25,7 +25,9 @@ final class LibraryScanner: @unchecked Sendable {
         logger.info("Database has \(existingPaths.count) tracked files")
 
         // Enumerate synchronously (enumerator is unavailable from async contexts)
-        logger.info("Enumerating files in \(self.musicDirectory.path)...")
+        let enumeratingMessage: String = "Enumerating files in \(self.musicDirectory.path)... This could take a bit..."
+        logger.info(Logger.Message(stringLiteral: enumeratingMessage))
+        print(enumeratingMessage)
         let audioFiles = collectFilesToProcess(existingPaths: existingPaths)
         let total = audioFiles.count
         logger.info("\(total) files need processing (\(existingPaths.count) unchanged, skipped)")
@@ -64,6 +66,7 @@ final class LibraryScanner: @unchecked Sendable {
             // As each task finishes, collect the result and add the next task
             for try await (track, errorPath, errorReason) in group {
                 completed += 1
+                onProgress?(completed, total)
                 if let track = track {
                     tracksToInsert.append(track)
                     logger.info("[\(completed)/\(total)] Done: \(track.artist) — \(track.title)")

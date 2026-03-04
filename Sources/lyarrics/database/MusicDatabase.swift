@@ -26,7 +26,7 @@ class MusicDatabase {
     /// For testing only: creates an instance with no database connection.
     init(nilDatabase _: Void) {}
 
-    init(dbPath: String = "\(NSHomeDirectory())/.lyarrics/library.db") throws {
+    init(dbPath: String = ProcessInfo.processInfo.environment["LYARRICS_DB_PATH"] ?? "\(NSHomeDirectory())/.lyarrics/library.db") throws {
         // Create directory if needed
         let dbURL = URL(fileURLWithPath: dbPath)
         try FileManager.default.createDirectory(

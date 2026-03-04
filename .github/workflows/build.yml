@@ -21,3 +21,50 @@ jobs:
 
       - name: Build
         run: swift build
+
+      - name: Test
+        run: swift test --enable-code-coverage
+
+      - name: Generate Coverage Report
+        if: github.event_name == 'pull_request'
+        run: |
+          BIN_PATH=$(swift build --show-bin-path)
+          BINARY=$(find "$BIN_PATH" -name "*.xctest" -maxdepth 1 | head -1)
+          llvm-cov report "$BINARY" \
+            -instr-profile "$BIN_PATH/codecoverage/default.profdata" \
+            --ignore-filename-regex=".build|Tests" \
+            > coverage-report.txt
+          cat coverage-report.txt
+
+      - name: Comment Coverage on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const report = fs.readFileSync('coverage-report.txt', 'utf8');
+            const body = `## Code Coverage\n\`\`\`\n${report}\n\`\`\``;
+            const marker = '## Code Coverage';
+
+            const comments = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+
+            const existing = comments.data.find(c => c.body.startsWith(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }

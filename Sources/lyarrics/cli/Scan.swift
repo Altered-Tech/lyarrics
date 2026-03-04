@@ -22,11 +22,22 @@ struct Scan: AsyncParsableCommand {
         let scanner = LibraryScanner(musicDirectory: musicDirectory, database: database)
 
         do {
-            logger.info("Starting Scan.")
+            let startMessage: String = "Starting Scan."
+            logger.info(Logger.Message(stringLiteral: startMessage))
+            print(startMessage)
             let start: Date = .now
-            try await scanner.scanLibrary()
+            try await scanner.scanLibrary { completed, total in
+                let width = 30
+                let filled = Int(Double(completed) / Double(total) * Double(width))
+                let bar = String(repeating: "=", count: filled) + String(repeating: " ", count: width - filled)
+                print("\r[\(bar)] \(completed)/\(total)", terminator: "")
+                FileHandle.standardOutput.synchronizeFile()
+            }
+            print()
             let finish: Date = .now
-            logger.info("Scan Complete. Took \(finish.timeIntervalSince1970.rounded() - start.timeIntervalSince1970.rounded()) seconds")
+            let endMessage: String = "Scan Complete. Took \(finish.timeIntervalSince1970.rounded() - start.timeIntervalSince1970.rounded()) seconds"
+            logger.info(Logger.Message(stringLiteral: endMessage))
+            print(endMessage)
         } catch TrackError.fileNotFound(let path) {
             logger.error("File not found at \(path)")
         } catch {
