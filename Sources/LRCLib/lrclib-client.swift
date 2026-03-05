@@ -5,7 +5,7 @@ import Foundation
 
 public struct LRCLibClient: @unchecked Sendable {
 
-    private let userAgent: String = "Lyarrics/0.0.0 (testing)"
+    private let userAgent: String = "Lyarrics/\(appVersion)"
 
     private let underlyingClient: any APIProtocol
     internal init(underlyingClient: any APIProtocol) {
