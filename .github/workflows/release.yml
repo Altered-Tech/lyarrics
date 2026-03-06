@@ -132,7 +132,7 @@ jobs:
             lyarrics-linux-arm64/*.tar.gz
 
   docker:
-    needs: check
+    needs: [check, build-linux]
     if: needs.check.outputs.has_release == 'true'
     runs-on: ubuntu-latest
     permissions:
@@ -141,8 +141,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+      - name: Download Linux artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: lyarrics-linux-*
+          merge-multiple: true
+
+      - name: Stage binaries for Docker
+        run: |
+          tar -xzf lyarrics-${{ needs.check.outputs.tag }}-linux-x86_64.tar.gz && mv lyarrics lyarrics-amd64
+          tar -xzf lyarrics-${{ needs.check.outputs.tag }}-linux-arm64.tar.gz && mv lyarrics lyarrics-arm64
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
