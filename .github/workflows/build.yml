@@ -31,7 +31,7 @@ jobs:
           BIN_PATH=$(swift build --show-bin-path)
           BINARY=$(find "$BIN_PATH" -name "*.xctest" -maxdepth 1 | head -1)
           llvm-profdata merge \
-            "$BIN_PATH/codecoverage/default.profraw" \
+            $(find "$BIN_PATH" -name "*.profraw") \
             -o "$BIN_PATH/codecoverage/default.profdata"
           llvm-cov report "$BINARY" \
             -instr-profile "$BIN_PATH/codecoverage/default.profdata" \
