@@ -30,11 +30,11 @@ jobs:
         run: |
           BIN_PATH=$(swift build --show-bin-path)
           BINARY=$(find "$BIN_PATH" -name "*.xctest" -maxdepth 1 | head -1)
-          llvm-profdata merge \
-            $(find "$BIN_PATH" -name "*.profraw") \
-            -o "$BIN_PATH/codecoverage/default.profdata"
+          readarray -d '' PROFRAW_FILES < <(find "$BIN_PATH" -name "*.profraw" -print0)
+          PROFDATA_DIR=$(dirname "${PROFRAW_FILES[0]}")
+          llvm-profdata merge "${PROFRAW_FILES[@]}" -o "$PROFDATA_DIR/default.profdata"
           llvm-cov report "$BINARY" \
-            -instr-profile "$BIN_PATH/codecoverage/default.profdata" \
+            -instr-profile "$PROFDATA_DIR/default.profdata" \
             --ignore-filename-regex=".build|Tests" \
             > coverage-report.txt
           cat coverage-report.txt
