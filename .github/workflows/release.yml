@@ -1,12 +1,45 @@
 name: Release
 
 on:
-  push:
-    tags:
-      - 'v*'
+  workflow_run:
+    workflows: ["Version"]
+    types: [completed]
 
 jobs:
+  check:
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    outputs:
+      has_release: ${{ steps.tag.outputs.has_release }}
+      tag: ${{ steps.tag.outputs.name }}
+      version: ${{ steps.tag.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check for new release tag
+        id: tag
+        run: |
+          git fetch --tags --force
+          TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          if [ -z "$TAG" ]; then
+            echo "has_release=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          TAG_SHA=$(git rev-list -n 1 "$TAG")
+          HEAD_SHA=$(git rev-parse HEAD)
+          if [ "$TAG_SHA" = "$HEAD_SHA" ]; then
+            echo "has_release=true" >> $GITHUB_OUTPUT
+            echo "name=$TAG" >> $GITHUB_OUTPUT
+            echo "version=${TAG#v}" >> $GITHUB_OUTPUT
+          else
+            echo "has_release=false" >> $GITHUB_OUTPUT
+          fi
+
   build-macos:
+    needs: check
+    if: needs.check.outputs.has_release == 'true'
     strategy:
       matrix:
         include:
@@ -26,9 +59,7 @@ jobs:
 
       - name: Inject version
         run: |
-          VERSION="${{ github.ref_name }}"
-          VERSION="${VERSION#v}"
-          printf 'public let appVersion = "%s"\n' "$VERSION" > Sources/LRCLib/Version.swift
+          printf 'public let appVersion = "%s"\n' "${{ needs.check.outputs.version }}" > Sources/LRCLib/Version.swift
 
       - name: Build
         run: swift build -c release --product lyarrics
@@ -36,15 +67,17 @@ jobs:
       - name: Package
         run: |
           cp .build/release/lyarrics lyarrics
-          tar -czf lyarrics-${{ github.ref_name }}-macos-${{ matrix.arch }}.tar.gz lyarrics
+          tar -czf lyarrics-${{ needs.check.outputs.tag }}-macos-${{ matrix.arch }}.tar.gz lyarrics
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: lyarrics-macos-${{ matrix.arch }}
-          path: lyarrics-${{ github.ref_name }}-macos-${{ matrix.arch }}.tar.gz
+          path: lyarrics-${{ needs.check.outputs.tag }}-macos-${{ matrix.arch }}.tar.gz
 
   build-linux:
+    needs: check
+    if: needs.check.outputs.has_release == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -57,9 +90,7 @@ jobs:
 
       - name: Inject version
         run: |
-          VERSION="${{ github.ref_name }}"
-          VERSION="${VERSION#v}"
-          printf 'public let appVersion = "%s"\n' "$VERSION" > Sources/LRCLib/Version.swift
+          printf 'public let appVersion = "%s"\n' "${{ needs.check.outputs.version }}" > Sources/LRCLib/Version.swift
 
       - name: Build
         run: swift build -c release --product lyarrics --static-swift-stdlib
@@ -67,16 +98,17 @@ jobs:
       - name: Package
         run: |
           cp .build/release/lyarrics lyarrics
-          tar -czf lyarrics-${{ github.ref_name }}-linux-x86_64.tar.gz lyarrics
+          tar -czf lyarrics-${{ needs.check.outputs.tag }}-linux-x86_64.tar.gz lyarrics
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: lyarrics-linux-x86_64
-          path: lyarrics-${{ github.ref_name }}-linux-x86_64.tar.gz
+          path: lyarrics-${{ needs.check.outputs.tag }}-linux-x86_64.tar.gz
 
   release:
-    needs: [build-macos, build-linux]
+    needs: [check, build-macos, build-linux]
+    if: needs.check.outputs.has_release == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -87,6 +119,7 @@ jobs:
       - name: Create release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ needs.check.outputs.tag }}
           generate_release_notes: true
           files: |
             lyarrics-macos-arm64/*.tar.gz
@@ -94,6 +127,8 @@ jobs:
             lyarrics-linux-x86_64/*.tar.gz
 
   docker:
+    needs: check
+    if: needs.check.outputs.has_release == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -120,9 +155,9 @@ jobs:
         with:
           images: ghcr.io/${{ github.repository }}
           tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
+            type=semver,pattern={{version}},value=${{ needs.check.outputs.tag }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ needs.check.outputs.tag }}
+            type=semver,pattern={{major}},value=${{ needs.check.outputs.tag }}
 
       - name: Build and push
         uses: docker/build-push-action@v6
@@ -134,6 +169,6 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             BUILD_DATE=${{ fromJSON(steps.meta.outputs.json).labels['org.opencontainers.image.created'] }}
-            VERSION=${{ github.ref_name }}
+            VERSION=${{ needs.check.outputs.tag }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
