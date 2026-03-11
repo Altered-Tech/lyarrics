@@ -87,7 +87,6 @@ private func makeSong() -> Song {
 /// so tests don't actually sleep.
 private func makeFetch(maxRetries: Int = 3) -> Fetch {
     var fetch = Fetch()
-    fetch.path = "/"
     fetch.maxRetries = maxRetries
     fetch.delay = 0
     return fetch

@@ -71,7 +71,6 @@ private func makeNotFoundOutput() -> Operations.getLyrics.Output {
 
 private func makeFetch() -> Fetch {
     var fetch = Fetch()
-    fetch.path = "/"
     fetch.maxRetries = 1
     fetch.delay = 0
     return fetch
