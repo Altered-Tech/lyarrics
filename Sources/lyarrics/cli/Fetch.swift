@@ -52,9 +52,6 @@ struct Fetch: AsyncParsableCommand {
 
     private static let logger = Logger(label: "com.lyarrics.Fetch")
 
-    @Argument(help: "The path to scan")
-    var path: String
-
     @Flag(name: .long, help: "Show what would be fetched without writing files or updating the database")
     var dryRun: Bool = false
 
@@ -67,23 +64,29 @@ struct Fetch: AsyncParsableCommand {
     @Option(name: .long, help: "Number of concurrent API requests")
     var concurrency: Int = 5
 
-    @Flag(name: .long, help: "Rescan library for any changes before fetching lyrics")
-    var scan: Bool = false
+    @Option(name: .long, help: "Scan the given directory for library changes before fetching")
+    var scan: String? = nil
+
+    @Option(name: .long, help: "Maximum number of songs to fetch lyrics for (omit for all)")
+    var limit: Int? = nil
 
     func run() async throws {
         let logger = Self.logger
 
         let database = try MusicDatabase()
-        let musicDirectory = URL(fileURLWithPath: path)
 
-        if scan {
+        if let scanPath = scan {
+            let musicDirectory = URL(fileURLWithPath: scanPath)
             let scanner = LibraryScanner(musicDirectory: musicDirectory, database: database)
-            logger.info("Scanning library at \(path)")
+            logger.info("Scanning library at \(scanPath)")
             try await scanner.scanLibrary()
             logger.info("Scan complete")
         }
 
-        let songsNeedingLyrics = try database.getSongsNeedingLyrics()
+        var songsNeedingLyrics = try database.getSongsNeedingLyrics()
+        if let limit {
+            songsNeedingLyrics = Array(songsNeedingLyrics.prefix(limit))
+        }
         logger.info("Found \(songsNeedingLyrics.count) songs needing lyrics")
 
         if dryRun {

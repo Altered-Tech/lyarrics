@@ -47,12 +47,12 @@ func makeFetchTestSetup(count: Int = 1) throws -> (fetch: Fetch, database: Music
     }
 
     var fetch = Fetch()
-    fetch.path = tempDir.path
     fetch.delay = 0
     fetch.concurrency = 1
     fetch.maxRetries = 1
     fetch.dryRun = false
-    fetch.scan = false
+    fetch.scan = nil
+    fetch.limit = nil
 
     return (fetch, db, tempDir, tracks)
 }

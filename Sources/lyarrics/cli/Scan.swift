@@ -6,7 +6,7 @@ import Logging
 struct Scan: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "scan",
-        abstract: "Fetch lyrics from the command line"
+        abstract: "Scan music directory"
     )
 
     private static let logger = Logger(label: "com.lyarrics.Scan")

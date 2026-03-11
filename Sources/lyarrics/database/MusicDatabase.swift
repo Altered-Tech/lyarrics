@@ -270,4 +270,39 @@ extension MusicDatabase {
         
         return results
     }
+
+    func getMusicDetails() throws -> MusicDetails? {
+        guard let db = db else {
+            logger.error("Database connection is nil")
+            return nil
+        }
+        logger.info("Getting Music Details")
+
+        var details: MusicDetails = .init(
+            songs: 0, 
+            lyrics: 0, 
+            plain: 0, 
+            sync: 0, 
+            instrumental: 0, 
+            missing: 0
+            )
+
+        for row in try db.prepare(songs) {
+            details.songs += 1
+            if row[lyrics] != nil {
+                details.lyrics += 1
+                if row[isSyncedLyrics] {
+                    details.sync += 1
+                } else if row[instrumental] {
+                    details.instrumental += 1
+                } else {
+                    details.plain += 1
+                }
+            } else {
+                details.missing += 1
+            }
+        }
+
+        return details
+    }
 }

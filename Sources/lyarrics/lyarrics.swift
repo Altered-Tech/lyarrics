@@ -13,6 +13,6 @@ struct lyarrics: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         abstract: "A utility for fetching song lyrics",
         version: appVersion,
-        subcommands: [Serve.self, Fetch.self, Scan.self, Search.self]
+        subcommands: [Serve.self, Fetch.self, Scan.self, Search.self, Details.self]
     )
 }

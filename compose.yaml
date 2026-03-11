@@ -1,0 +1,12 @@
+name: lyarrics
+
+services:
+  lyarrics:
+    image: ghcr.io/altered-tech/lyarrics:latest
+    container_name: lyarrics
+    volumes:
+      - lyarrics-data:/data
+      - ${MUSIC_PATH}:/music
+
+volumes:
+  lyarrics-data:
