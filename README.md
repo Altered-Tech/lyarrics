@@ -65,7 +65,7 @@ lyarrics serve [--hostname 127.0.0.1] [--port 8080]
 
 #### `details`
 
-Show details for a track in the database.
+Show details for lyric stats in the database.
 
 ## Architecture
 
