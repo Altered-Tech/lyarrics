@@ -19,8 +19,7 @@ class MusicDatabase {
     private let duration = Expression<Double>("duration")
     private let trackNumber = Expression<Int?>("track_number")
     private let lyrics = Expression<String?>("lyrics")
-    private let isSyncedLyrics = Expression<Bool>("is_synced_lyrics")
-    private let instrumental = Expression<Bool>("instrumental")
+    private let lyricType = Expression<String?>("lyric_type")
     private let lastModified = Expression<Date>("last_modified")
 
     /// For testing only: creates an instance with no database connection.
@@ -60,9 +59,8 @@ class MusicDatabase {
             t.column(duration)
             t.column(trackNumber)
             t.column(lyrics)
-            t.column(instrumental)
+            t.column(lyricType)
             t.column(lastModified)
-            t.column(isSyncedLyrics)
         })
 
         if tableExists {
@@ -70,7 +68,7 @@ class MusicDatabase {
             try migrateIfNeeded(db: db)
         } else {
             // Brand-new database: schema is already correct, just stamp the version.
-            try db.run("PRAGMA user_version = 1")
+            try db.run("PRAGMA user_version = 2")
         }
 
         // Create indexes for fast searching (after migration, so they land on the live table)
@@ -113,6 +111,48 @@ class MusicDatabase {
             }
             try db.run("PRAGMA user_version = 1")
         }
+
+        if version < 2 {
+            // Migration 2: replace instrumental (Bool) and is_synced_lyrics (Bool)
+            // with a single nullable lyric_type (TEXT) column.
+            try db.transaction {
+                try db.run("""
+                    CREATE TABLE IF NOT EXISTS songs_v2 (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        file_track_path TEXT NOT NULL UNIQUE,
+                        file_track_name TEXT NOT NULL,
+                        file_lyric_path TEXT,
+                        file_lyric_name TEXT,
+                        title TEXT NOT NULL,
+                        artist TEXT NOT NULL,
+                        album TEXT NOT NULL,
+                        duration REAL NOT NULL,
+                        track_number INTEGER,
+                        lyrics TEXT,
+                        lyric_type TEXT,
+                        last_modified REAL NOT NULL
+                    )
+                    """)
+                try db.run("""
+                    INSERT INTO songs_v2
+                        (id, file_track_path, file_track_name, file_lyric_path, file_lyric_name,
+                         title, artist, album, duration, track_number, lyrics, lyric_type, last_modified)
+                    SELECT id, file_track_path, file_track_name, file_lyric_path, file_lyric_name,
+                           title, artist, album, duration, track_number, lyrics,
+                           CASE
+                               WHEN instrumental = 1 THEN 'instrumental'
+                               WHEN is_synced_lyrics = 1 THEN 'synced'
+                               WHEN lyrics IS NOT NULL THEN 'plain'
+                               ELSE NULL
+                           END,
+                           last_modified
+                    FROM songs
+                    """)
+                try db.run("DROP TABLE songs")
+                try db.run("ALTER TABLE songs_v2 RENAME TO songs")
+            }
+            try db.run("PRAGMA user_version = 2")
+        }
     }
 }
 
@@ -123,7 +163,7 @@ extension MusicDatabase {
             return
         }
         logger.debug("Inserting/updating song: \(song.title) by \(song.artist)")
-        
+
         let insert = songs.insert(
             or: .replace,
             fileTrackPath <- song.fileTrackPath,
@@ -136,24 +176,23 @@ extension MusicDatabase {
             duration <- song.duration,
             trackNumber <- song.trackNumber,
             lyrics <- song.lyrics,
-            instrumental <- song.instrumental,
-            isSyncedLyrics <- song.isSyncedLyrics,
+            lyricType <- song.lyricType?.rawValue,
             lastModified <- song.lastModified
         )
-        
+
         try db.run(insert)
     }
-    
+
     func searchLyrics(query: String) throws -> [Track] {
         guard let db = db else {
             logger.error("Database connection is nil")
             return []
         }
         logger.info("Searching lyrics for: \(query)")
-        
+
         let searchQuery = songs.filter(lyrics.like("%\(query)%"))
         var results: [Track] = []
-        
+
         for row in try db.prepare(searchQuery) {
             results.append(Track(
                 fileTrackPath: row[fileTrackPath],
@@ -166,24 +205,23 @@ extension MusicDatabase {
                 duration: row[duration],
                 trackNumber: row[trackNumber],
                 lyrics: row[lyrics],
-                instrumental: row[instrumental],
-                isSyncedLyrics: row[isSyncedLyrics],
+                lyricType: row[lyricType].flatMap(LyricType.init(rawValue:)),
                 lastModified: row[lastModified]
             ))
         }
-        
+
         return results
     }
-    
+
     func getSongByPath(_ path: String) throws -> Track? {
         guard let db = db else {
             logger.error("Database connection is nil")
             return nil
         }
         logger.debug("Looking up song by path: \(path)")
-        
+
         let query = songs.filter(fileTrackPath == path).limit(1)
-        
+
         for row in try db.prepare(query) {
             return Track(
                 fileTrackPath: row[fileTrackPath],
@@ -196,15 +234,14 @@ extension MusicDatabase {
                 duration: row[duration],
                 trackNumber: row[trackNumber],
                 lyrics: row[lyrics],
-                instrumental: row[instrumental],
-                isSyncedLyrics: row[isSyncedLyrics],
+                lyricType: row[lyricType].flatMap(LyricType.init(rawValue:)),
                 lastModified: row[lastModified]
             )
         }
-        
+
         return nil
     }
-    
+
     func getSongsNeedingLyrics() throws -> [Track] {
         guard let db = db else {
             logger.error("Database connection is nil")
@@ -212,7 +249,7 @@ extension MusicDatabase {
         }
         logger.info("Fetching songs that need lyrics")
 
-        let query = songs.filter(lyrics == nil || isSyncedLyrics == false)
+        let query = songs.filter(lyricType == nil || lyricType == LyricType.plain.rawValue)
         var results: [Track] = []
 
         for row in try db.prepare(query) {
@@ -227,8 +264,7 @@ extension MusicDatabase {
                 duration: row[duration],
                 trackNumber: row[trackNumber],
                 lyrics: row[lyrics],
-                instrumental: row[instrumental],
-                isSyncedLyrics: row[isSyncedLyrics],
+                lyricType: row[lyricType].flatMap(LyricType.init(rawValue:)),
                 lastModified: row[lastModified]
             ))
         }
@@ -236,7 +272,7 @@ extension MusicDatabase {
         return results
     }
 
-    func updateSongLyrics(trackPath: String, lyricsContent: String?, isSynced: Bool, isInstrumental: Bool, lyricPath: String?, lyricName: String?) throws {
+    func updateSongLyrics(trackPath: String, lyricsContent: String?, lyricType newLyricType: LyricType?, lyricPath: String?, lyricName: String?) throws {
         guard let db = db else {
             logger.error("Database connection is nil")
             return
@@ -246,8 +282,7 @@ extension MusicDatabase {
         let song = songs.filter(fileTrackPath == trackPath)
         try db.run(song.update(
             lyrics <- lyricsContent,
-            isSyncedLyrics <- isSynced,
-            instrumental <- isInstrumental,
+            lyricType <- newLyricType?.rawValue,
             fileLyricPath <- lyricPath,
             fileLyricName <- lyricName
         ))
@@ -284,8 +319,7 @@ extension MusicDatabase {
                     duration <- song.duration,
                     trackNumber <- song.trackNumber,
                     lyrics <- song.lyrics,
-                    instrumental <- song.instrumental,
-                    isSyncedLyrics <- song.isSyncedLyrics,
+                    lyricType <- song.lyricType?.rawValue,
                     lastModified <- song.lastModified
                 )
                 try db.run(insert)
@@ -299,9 +333,9 @@ extension MusicDatabase {
             return []
         }
         logger.info("Fetching all songs")
-        
+
         var results: [Track] = []
-        
+
         for row in try db.prepare(songs) {
             results.append(Track(
                 fileTrackPath: row[fileTrackPath],
@@ -314,12 +348,11 @@ extension MusicDatabase {
                 duration: row[duration],
                 trackNumber: row[trackNumber],
                 lyrics: row[lyrics],
-                instrumental: row[instrumental],
-                isSyncedLyrics: row[isSyncedLyrics],
+                lyricType: row[lyricType].flatMap(LyricType.init(rawValue:)),
                 lastModified: row[lastModified]
             ))
         }
-        
+
         return results
     }
 
@@ -331,26 +364,27 @@ extension MusicDatabase {
         logger.info("Getting Music Details")
 
         var details: MusicDetails = .init(
-            songs: 0, 
-            lyrics: 0, 
-            plain: 0, 
-            sync: 0, 
-            instrumental: 0, 
+            songs: 0,
+            lyrics: 0,
+            plain: 0,
+            sync: 0,
+            instrumental: 0,
             missing: 0
             )
 
         for row in try db.prepare(songs) {
             details.songs += 1
-            if row[lyrics] != nil {
+            switch row[lyricType].flatMap(LyricType.init(rawValue:)) {
+            case .synced:
                 details.lyrics += 1
-                if row[isSyncedLyrics] {
-                    details.sync += 1
-                } else if row[instrumental] {
-                    details.instrumental += 1
-                } else {
-                    details.plain += 1
-                }
-            } else {
+                details.sync += 1
+            case .plain:
+                details.lyrics += 1
+                details.plain += 1
+            case .instrumental:
+                details.lyrics += 1
+                details.instrumental += 1
+            case nil:
                 details.missing += 1
             }
         }

@@ -94,7 +94,7 @@ struct FetchTrackOutcomeTests {
 
         let (returnedTrack, outcome) = await fetch.fetchTrackOutcome(track: track, client: client, rateLimiter: rateLimiter, logger: logger)
 
-        guard case .synced(let content, _, _) = outcome else {
+        guard case .synced(let content, _) = outcome else {
             Issue.record("Expected .synced, got \(outcome)")
             return
         }
@@ -111,7 +111,7 @@ struct FetchTrackOutcomeTests {
 
         let (_, outcome) = await fetch.fetchTrackOutcome(track: track, client: client, rateLimiter: rateLimiter, logger: logger)
 
-        guard case .plain(let content, _, _) = outcome else {
+        guard case .plain(let content, _) = outcome else {
             Issue.record("Expected .plain, got \(outcome)")
             return
         }
@@ -232,26 +232,11 @@ struct FetchTrackOutcomeTests {
 
         let (_, outcome) = await fetch.fetchTrackOutcome(track: customTrack, client: client, rateLimiter: rateLimiter, logger: logger)
 
-        guard case .synced(_, let lrcURL, _) = outcome else {
+        guard case .synced(_, let lrcURL) = outcome else {
             Issue.record("Expected .synced, got \(outcome)")
             return
         }
         #expect(lrcURL.pathExtension == "lrc")
         #expect(lrcURL.deletingPathExtension().lastPathComponent == "song")
-    }
-
-    @Test("isInstrumental flag is forwarded from record into .synced outcome")
-    func instrumentalFlagForwardedInSynced() async {
-        let mock = FixedMockAPIClient(output: makeOkOutput(instrumental: true, syncedLyrics: "[00:00.28] Instrumental"))
-        let client = LRCLibClient(underlyingClient: mock)
-        let fetch = makeFetch()
-
-        let (_, outcome) = await fetch.fetchTrackOutcome(track: track, client: client, rateLimiter: rateLimiter, logger: logger)
-
-        guard case .synced(_, _, let isInstrumental) = outcome else {
-            Issue.record("Expected .synced, got \(outcome)")
-            return
-        }
-        #expect(isInstrumental == true)
     }
 }

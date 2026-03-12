@@ -20,8 +20,7 @@ private func makeTrack(
     duration: Double = 180.0,
     trackNumber: Int? = 1,
     lyrics: String? = nil,
-    instrumental: Bool = false,
-    isSyncedLyrics: Bool = false
+    lyricType: LyricType? = nil
 ) -> Track {
     Track(
         fileTrackPath: path,
@@ -34,8 +33,7 @@ private func makeTrack(
         duration: duration,
         trackNumber: trackNumber,
         lyrics: lyrics,
-        instrumental: instrumental,
-        isSyncedLyrics: isSyncedLyrics,
+        lyricType: lyricType,
         lastModified: Date()
     )
 }
@@ -138,16 +136,14 @@ struct MusicDatabaseTests {
         try db.updateSongLyrics(
             trackPath: path,
             lyricsContent: lyricsContent,
-            isSynced: true,
-            isInstrumental: false,
+            lyricType: .synced,
             lyricPath: "/music/song.lrc",
             lyricName: "song.lrc"
         )
 
         let updated = try db.getSongByPath(path)
         #expect(updated?.lyrics == lyricsContent)
-        #expect(updated?.isSyncedLyrics == true)
-        #expect(updated?.instrumental == false)
+        #expect(updated?.lyricType == .synced)
         #expect(updated?.fileLyricPath == "/music/song.lrc")
         #expect(updated?.fileLyricName == "song.lrc")
     }
@@ -163,14 +159,13 @@ struct MusicDatabaseTests {
         try db.updateSongLyrics(
             trackPath: path,
             lyricsContent: nil,
-            isSynced: false,
-            isInstrumental: true,
+            lyricType: .instrumental,
             lyricPath: nil,
             lyricName: nil
         )
 
         let updated = try db.getSongByPath(path)
-        #expect(updated?.instrumental == true)
+        #expect(updated?.lyricType == .instrumental)
         #expect(updated?.lyrics == nil)
     }
 
@@ -182,19 +177,22 @@ struct MusicDatabaseTests {
         defer { try? FileManager.default.removeItem(at: tempDir) }
 
         // Track with no lyrics at all
-        let noLyrics = makeTrack(path: "/music/a.mp3", lyrics: nil, isSyncedLyrics: false)
+        let noLyrics = makeTrack(path: "/music/a.mp3", lyrics: nil)
         // Track with plain (unsynced) lyrics
-        let plainLyrics = makeTrack(path: "/music/b.mp3", lyrics: "Hello world", isSyncedLyrics: false)
+        let plainLyrics = makeTrack(path: "/music/b.mp3", lyrics: "Hello world", lyricType: .plain)
         // Track with synced lyrics — should NOT appear
-        let syncedLyrics = makeTrack(path: "/music/c.mp3", lyrics: "[00:01.00] Hi", isSyncedLyrics: true)
+        let syncedLyrics = makeTrack(path: "/music/c.mp3", lyrics: "[00:01.00] Hi", lyricType: .synced)
+        // Track with instrumental music, not lyrics - should NOT appear
+        let instrumentalLyrics = makeTrack(path: "/music/d.mp3", lyrics: nil, lyricType: .instrumental)
 
-        try db.insertOrUpdateSongs([noLyrics, plainLyrics, syncedLyrics])
+        try db.insertOrUpdateSongs([noLyrics, plainLyrics, syncedLyrics, instrumentalLyrics])
 
         let needing = try db.getSongsNeedingLyrics()
         let paths = needing.map(\.fileTrackPath)
         #expect(paths.contains("/music/a.mp3"))
         #expect(paths.contains("/music/b.mp3"))
         #expect(!paths.contains("/music/c.mp3"))
+        #expect(!paths.contains("/music/d.mp3"))
     }
 
     @Test("getSongsNeedingLyrics returns empty when all tracks have synced lyrics")
@@ -202,7 +200,7 @@ struct MusicDatabaseTests {
         let (db, tempDir) = try makeTestDatabase()
         defer { try? FileManager.default.removeItem(at: tempDir) }
 
-        let synced = makeTrack(path: "/music/a.mp3", lyrics: "[00:01.00] Hi", isSyncedLyrics: true)
+        let synced = makeTrack(path: "/music/a.mp3", lyrics: "[00:01.00] Hi", lyricType: .synced)
         try db.insertOrUpdateSong(synced)
 
         let needing = try db.getSongsNeedingLyrics()
@@ -267,8 +265,7 @@ struct MusicDatabaseTests {
             duration: 120.0,
             trackNumber: nil,
             lyrics: nil,
-            instrumental: false,
-            isSyncedLyrics: false,
+            lyricType: nil,
             lastModified: now
         )
         try db.insertOrUpdateSong(track)
@@ -356,8 +353,7 @@ struct MusicDatabaseNilTests {
         try db.updateSongLyrics(
             trackPath: "/music/song.mp3",
             lyricsContent: "Hello",
-            isSynced: true,
-            isInstrumental: false,
+            lyricType: .synced,
             lyricPath: "/music/song.lrc",
             lyricName: "song.lrc"
         )

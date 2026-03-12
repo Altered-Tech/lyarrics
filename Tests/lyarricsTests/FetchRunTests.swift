@@ -137,8 +137,7 @@ struct FetchRunTests {
 
         let updated = try db.getSongByPath(tracks[0].fileTrackPath)
         #expect(updated?.lyrics == syncedContent)
-        #expect(updated?.isSyncedLyrics == true)
-        #expect(updated?.instrumental == false)
+        #expect(updated?.lyricType == .synced)
         #expect(updated?.fileLyricPath == lrcURL.path)
         #expect(updated?.fileLyricName == lrcURL.lastPathComponent)
     }
@@ -173,8 +172,7 @@ struct FetchRunTests {
 
         let updated = try db.getSongByPath(tracks[0].fileTrackPath)
         #expect(updated?.lyrics == plainContent)
-        #expect(updated?.isSyncedLyrics == false)
-        #expect(updated?.instrumental == false)
+        #expect(updated?.lyricType == .plain)
     }
 
     // MARK: Instrumental outcome
@@ -203,7 +201,7 @@ struct FetchRunTests {
         #expect(!FileManager.default.fileExists(atPath: lrcURL.path))
 
         let updated = try db.getSongByPath(tracks[0].fileTrackPath)
-        #expect(updated?.instrumental == true)
+        #expect(updated?.lyricType == .instrumental)
         #expect(updated?.lyrics == nil)
         #expect(updated?.fileLyricPath == nil)
     }
@@ -231,7 +229,7 @@ struct FetchRunTests {
 
         let song = try db.getSongByPath(tracks[0].fileTrackPath)
         #expect(song?.lyrics == nil)
-        #expect(song?.instrumental == false)
+        #expect(song?.lyricType == nil)
     }
 
     // MARK: notFound outcome
@@ -329,7 +327,7 @@ struct FetchRunTests {
 
         let song = try db.getSongByPath(tracks[0].fileTrackPath)
         #expect(song?.lyrics == nil)
-        #expect(song?.isSyncedLyrics == false)
+        #expect(song?.lyricType == nil)
     }
 
     @Test("dryRun skips database update for instrumental")
@@ -352,7 +350,7 @@ struct FetchRunTests {
         )
 
         let song = try db.getSongByPath(tracks[0].fileTrackPath)
-        #expect(song?.instrumental == false)
+        #expect(song?.lyricType == nil)
     }
 
     // MARK: Multiple tracks
