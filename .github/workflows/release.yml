@@ -40,6 +40,7 @@ jobs:
   build-macos:
     needs: check
     if: needs.check.outputs.has_release == 'true'
+    continue-on-error: true
     strategy:
       matrix:
         include:
@@ -76,6 +77,7 @@ jobs:
   build-linux:
     needs: check
     if: needs.check.outputs.has_release == 'true'
+    continue-on-error: true
     strategy:
       matrix:
         include:
@@ -113,19 +115,40 @@ jobs:
 
   release:
     needs: [check, build-macos, build-linux]
-    if: needs.check.outputs.has_release == 'true'
+    if: always() && needs.check.outputs.has_release == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
+      - name: Build failure notes
+        id: notes
+        run: |
+          NOTES=""
+          if [ "${{ needs.build-macos.result }}" != "success" ]; then
+            NOTES="${NOTES}> [!WARNING]\n> macOS (arm64) build failed — binary not included in this release.\n\n"
+          fi
+          if [ "${{ needs.build-linux.result }}" != "success" ]; then
+            NOTES="${NOTES}> [!WARNING]\n> Linux builds failed — binaries not included in this release.\n\n"
+          fi
+          if [ -n "$NOTES" ]; then
+            printf "$NOTES" > failure-notes.md
+            echo "has_failures=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_failures=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Download artifacts
         uses: actions/download-artifact@v4
+        continue-on-error: true
 
       - name: Create release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.check.outputs.tag }}
           generate_release_notes: true
+          append_body: ${{ steps.notes.outputs.has_failures == 'true' }}
+          body_path: ${{ steps.notes.outputs.has_failures == 'true' && 'failure-notes.md' || '' }}
+          fail_on_unmatched_files: false
           files: |
             lyarrics-macos-arm64/*.tar.gz
             lyarrics-linux-x86_64/*.tar.gz
@@ -133,7 +156,7 @@ jobs:
 
   docker:
     needs: [check, build-linux]
-    if: needs.check.outputs.has_release == 'true'
+    if: needs.check.outputs.has_release == 'true' && needs.build-linux.result == 'success'
     runs-on: ubuntu-latest
     permissions:
       contents: read

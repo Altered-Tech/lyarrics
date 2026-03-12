@@ -17,7 +17,7 @@ let package = Package(
         .package(url: "https://github.com/swift-server/swift-openapi-hummingbird.git", from: "2.0.0"),
         .package(url: "https://github.com/swift-server/swift-openapi-async-http-client", from: "1.0.0"),
         .package(url: "https://github.com/apple/swift-nio", from: "2.86.0"),
-        .package(url: "https://github.com/stephencelis/SQLite.swift.git", branch: "revert-linux-trait"),
+        .package(url: "https://github.com/stephencelis/SQLite.swift.git", from: "0.16.0"),
         .package(url: "https://github.com/apple/swift-log", from: "1.6.0")
     ],
     targets: [
