@@ -212,7 +212,7 @@ extension MusicDatabase {
         }
         logger.info("Fetching songs that need lyrics")
 
-        let query = songs.filter(lyrics == nil || isSyncedLyrics == false)
+        let query = songs.filter(lyrics == nil || isSyncedLyrics == false || instrumental != true)
         var results: [Track] = []
 
         for row in try db.prepare(query) {
@@ -350,6 +350,9 @@ extension MusicDatabase {
                 } else {
                     details.plain += 1
                 }
+            } else if row[instrumental] {
+                details.lyrics += 1
+                details.instrumental += 1
             } else {
                 details.missing += 1
             }
