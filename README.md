@@ -55,7 +55,7 @@ Look up lyrics for a single song directly from LRCLIB.
 lyarrics search "Artist" "Album" "Track Title" 210
 ```
 
-#### `serve`
+#### `serve` WORK IN PROGRESS
 
 Start a local web server.
 
