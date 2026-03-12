@@ -228,9 +228,14 @@ struct Fetch: AsyncParsableCommand {
                 }
 
                 processed += 1
+                let terminalWidth = ProcessInfo.processInfo.environment["COLUMNS"].flatMap(Int.init) ?? 120
                 let line = "\(statusTag) (\(processed)/\(total)) \(track.artist) - \(track.title)"
-                print("\r\(line.padding(toLength: max(line.count, 80), withPad: " ", startingAt: 0))", terminator: "")
-                FileHandle.standardOutput.synchronizeFile()
+                let displayLine = line.count > terminalWidth
+                    ? String(line.prefix(terminalWidth - 1)) + "…"
+                    : line
+                let paddedLine = displayLine.padding(toLength: terminalWidth, withPad: " ", startingAt: 0)
+                print("\r\(paddedLine)", terminator: "")
+                fflush(nil)
 
                 // Replenish the pool as each result comes in
                 if let next = trackIterator.next() {
