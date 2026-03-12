@@ -230,7 +230,7 @@ struct Fetch: AsyncParsableCommand {
                 processed += 1
                 let line = "\(statusTag) (\(processed)/\(total)) \(track.artist) - \(track.title)"
                 print("\r\(line.padding(toLength: max(line.count, 80), withPad: " ", startingAt: 0))", terminator: "")
-                fflush(stdout)
+                FileHandle.standardOutput.synchronizeFile()
 
                 // Replenish the pool as each result comes in
                 if let next = trackIterator.next() {
