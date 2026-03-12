@@ -78,9 +78,11 @@ struct Fetch: AsyncParsableCommand {
         if let scanPath = scan {
             let musicDirectory = URL(fileURLWithPath: scanPath)
             let scanner = LibraryScanner(musicDirectory: musicDirectory, database: database)
+            print("Scanning library at \(scanPath)...")
             logger.info("Scanning library at \(scanPath)")
             try await scanner.scanLibrary()
             logger.info("Scan complete")
+            print("Scan complete.")
         }
 
         var songsNeedingLyrics = try database.getSongsNeedingLyrics()
@@ -89,9 +91,19 @@ struct Fetch: AsyncParsableCommand {
         }
         logger.info("Found \(songsNeedingLyrics.count) songs needing lyrics")
 
+        guard !songsNeedingLyrics.isEmpty else {
+            print("No songs need lyrics. Nothing to do.")
+            return
+        }
+
+        print("Found \(songsNeedingLyrics.count) song(s) needing lyrics.")
+
         if dryRun {
             logger.info("Dry run enabled, no files will be written or database updated")
+            print("[dry-run] No files will be written or database updated.")
         }
+
+        print("Starting fetch (concurrency: \(concurrency), delay: \(delay)ms)...")
 
         let lrc = LRCLibClient()
         let rateLimiter = RateLimiter(milliseconds: delay)
@@ -103,6 +115,7 @@ struct Fetch: AsyncParsableCommand {
             logger: logger
         )
         logger.info("Fetch complete. Fetched: \(fetched), Failed: \(failed)")
+        print("\nDone. Fetched: \(fetched), Failed: \(failed).")
     }
 
     @discardableResult
@@ -115,6 +128,14 @@ struct Fetch: AsyncParsableCommand {
     ) async throws -> (fetched: Int, failed: Int) {
         var fetched = 0
         var failed = 0
+        var processed = 0
+        let total = songsNeedingLyrics.count
+
+        // Error type counters for summary
+        var notFoundCount = 0
+        var apiErrorCounts: [Int: Int] = [:]
+        var decodingErrorCount = 0
+        var unknownErrorCount = 0
 
         try await withThrowingTaskGroup(of: (Track, FetchOutcome).self) { group in
             var trackIterator = songsNeedingLyrics.makeIterator()
@@ -143,6 +164,7 @@ struct Fetch: AsyncParsableCommand {
                         )
                     }
                     logger.info("[syncd] \(track.artist) - \(track.title) -> \(lrcURL.lastPathComponent)")
+                    print("[synced] \(track.artist) - \(track.title)")
                     fetched += 1
 
                 case .plain(let content, let lrcURL, let isInstrumental):
@@ -158,6 +180,7 @@ struct Fetch: AsyncParsableCommand {
                         )
                     }
                     logger.info("[plain] \(track.artist) - \(track.title) -> \(lrcURL.lastPathComponent)")
+                    print("[plain ] \(track.artist) - \(track.title)")
                     fetched += 1
 
                 case .instrumental:
@@ -172,25 +195,36 @@ struct Fetch: AsyncParsableCommand {
                         )
                     }
                     logger.info("[instrumental] \(track.artist) - \(track.title)")
+                    print("[instr ] \(track.artist) - \(track.title)")
                     fetched += 1
 
                 case .noLyrics:
                     logger.warning("[none] \(track.artist) - \(track.title)")
+                    print("[none  ] \(track.artist) - \(track.title)")
                     fetched += 1
 
                 case .notFound:
                     logger.warning("Not found on LRCLIB: \(track.artist) - \(track.title)")
+                    notFoundCount += 1
                     failed += 1
 
                 case .apiError(let code):
                     logger.error("LRCLIB error \(code) for: \(track.artist) - \(track.title)")
+                    apiErrorCounts[code, default: 0] += 1
                     failed += 1
 
                 case .decodingError(let description):
                     logger.error("Decoding error for \(track.artist) - \(track.title): \(description)")
+                    decodingErrorCount += 1
 
                 case .unknownError(let description):
                     logger.error("Unknown error for \(track.artist) - \(track.title): \(description)")
+                    unknownErrorCount += 1
+                }
+
+                processed += 1
+                if processed % 25 == 0 {
+                    print("Progress: \(processed)/\(total)")
                 }
 
                 // Replenish the pool as each result comes in
@@ -199,6 +233,24 @@ struct Fetch: AsyncParsableCommand {
                         await self.fetchTrackOutcome(track: next, client: client, rateLimiter: rateLimiter, logger: logger)
                     }
                 }
+            }
+        }
+
+        // Print error summary grouped by type
+        let totalErrors = notFoundCount + apiErrorCounts.values.reduce(0, +) + decodingErrorCount + unknownErrorCount
+        if totalErrors > 0 {
+            print("\nError summary (\(totalErrors) total):")
+            if notFoundCount > 0 {
+                print("  Not found on LRCLIB: \(notFoundCount)")
+            }
+            for (code, count) in apiErrorCounts.sorted(by: { $0.key < $1.key }) {
+                print("  API error \(code): \(count)")
+            }
+            if decodingErrorCount > 0 {
+                print("  Decoding errors: \(decodingErrorCount)")
+            }
+            if unknownErrorCount > 0 {
+                print("  Unknown errors: \(unknownErrorCount)")
             }
         }
 
