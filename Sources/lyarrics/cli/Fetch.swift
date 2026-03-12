@@ -235,7 +235,7 @@ struct Fetch: AsyncParsableCommand {
                     : line
                 let paddedLine = displayLine.padding(toLength: terminalWidth, withPad: " ", startingAt: 0)
                 print("\r\(paddedLine)", terminator: "")
-                FileHandle.standardOutput.synchronizeFile()
+                fflush(stdout)
 
                 // Replenish the pool as each result comes in
                 if let next = trackIterator.next() {
