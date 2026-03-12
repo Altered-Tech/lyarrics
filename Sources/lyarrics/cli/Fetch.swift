@@ -150,6 +150,7 @@ struct Fetch: AsyncParsableCommand {
 
             // Process results serially (safe for DB writes) and keep the pool full
             for try await (track, outcome) in group {
+                var statusTag = ""
                 switch outcome {
                 case .synced(let content, let lrcURL, let isInstrumental):
                     if !dryRun {
@@ -164,7 +165,7 @@ struct Fetch: AsyncParsableCommand {
                         )
                     }
                     logger.info("[syncd] \(track.artist) - \(track.title) -> \(lrcURL.lastPathComponent)")
-                    print("[synced] \(track.artist) - \(track.title)")
+                    statusTag = "[synced]"
                     fetched += 1
 
                 case .plain(let content, let lrcURL, let isInstrumental):
@@ -180,7 +181,7 @@ struct Fetch: AsyncParsableCommand {
                         )
                     }
                     logger.info("[plain] \(track.artist) - \(track.title) -> \(lrcURL.lastPathComponent)")
-                    print("[plain ] \(track.artist) - \(track.title)")
+                    statusTag = "[plain ]"
                     fetched += 1
 
                 case .instrumental:
@@ -195,37 +196,41 @@ struct Fetch: AsyncParsableCommand {
                         )
                     }
                     logger.info("[instrumental] \(track.artist) - \(track.title)")
-                    print("[instr ] \(track.artist) - \(track.title)")
+                    statusTag = "[instr ]"
                     fetched += 1
 
                 case .noLyrics:
                     logger.warning("[none] \(track.artist) - \(track.title)")
-                    print("[none  ] \(track.artist) - \(track.title)")
+                    statusTag = "[none  ]"
                     fetched += 1
 
                 case .notFound:
                     logger.warning("Not found on LRCLIB: \(track.artist) - \(track.title)")
+                    statusTag = "[miss  ]"
                     notFoundCount += 1
                     failed += 1
 
                 case .apiError(let code):
                     logger.error("LRCLIB error \(code) for: \(track.artist) - \(track.title)")
+                    statusTag = "[err \(code)]"
                     apiErrorCounts[code, default: 0] += 1
                     failed += 1
 
                 case .decodingError(let description):
                     logger.error("Decoding error for \(track.artist) - \(track.title): \(description)")
+                    statusTag = "[decode]"
                     decodingErrorCount += 1
 
                 case .unknownError(let description):
                     logger.error("Unknown error for \(track.artist) - \(track.title): \(description)")
+                    statusTag = "[error ]"
                     unknownErrorCount += 1
                 }
 
                 processed += 1
-                if processed % 25 == 0 {
-                    print("Progress: \(processed)/\(total)")
-                }
+                let line = "\(statusTag) (\(processed)/\(total)) \(track.artist) - \(track.title)"
+                print("\r\(line.padding(toLength: max(line.count, 80), withPad: " ", startingAt: 0))", terminator: "")
+                fflush(stdout)
 
                 // Replenish the pool as each result comes in
                 if let next = trackIterator.next() {
