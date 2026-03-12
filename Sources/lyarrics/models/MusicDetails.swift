@@ -15,6 +15,5 @@ struct MusicDetails {
         print("Music Lyrics Details")
         print(String(repeating: "-", count: 25))
         for (label, value) in rows { print("\(label): \(value)") }
-
     }
 }

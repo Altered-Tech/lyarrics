@@ -40,11 +40,19 @@ class MusicDatabase {
     }
 
     private func createTable() throws {
-        try db?.run(songs.create(ifNotExists: true) { t in
+        guard let db = db else { return }
+
+        // Snapshot whether the songs table exists before we (potentially) create it,
+        // so we can distinguish a brand-new database from an existing one.
+        let tableExists = (try db.scalar(
+            "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='songs'"
+        ) as? Int64 ?? 0) > 0
+
+        try db.run(songs.create(ifNotExists: true) { t in
             t.column(id, primaryKey: .autoincrement)
             t.column(fileTrackPath, unique: true)
             t.column(fileTrackName)
-            t.column(fileLyricPath, unique: true)
+            t.column(fileLyricPath)
             t.column(fileLyricName)
             t.column(title)
             t.column(artist)
@@ -56,11 +64,55 @@ class MusicDatabase {
             t.column(lastModified)
             t.column(isSyncedLyrics)
         })
-        
-        // Create indexes for fast searching
-        try db?.run(songs.createIndex(title, ifNotExists: true))
-        try db?.run(songs.createIndex(artist, ifNotExists: true))
-        try db?.run(songs.createIndex(lyrics, ifNotExists: true))
+
+        if tableExists {
+            // Existing database: run any pending schema migrations.
+            try migrateIfNeeded(db: db)
+        } else {
+            // Brand-new database: schema is already correct, just stamp the version.
+            try db.run("PRAGMA user_version = 1")
+        }
+
+        // Create indexes for fast searching (after migration, so they land on the live table)
+        try db.run(songs.createIndex(title, ifNotExists: true))
+        try db.run(songs.createIndex(artist, ifNotExists: true))
+        try db.run(songs.createIndex(lyrics, ifNotExists: true))
+    }
+
+    /// Runs schema migrations using PRAGMA user_version as a version counter.
+    /// Only called for pre-existing databases.
+    private func migrateIfNeeded(db: Connection) throws {
+        let version = (try db.scalar("PRAGMA user_version") as? Int64) ?? 0
+
+        if version < 1 {
+            // Migration 1: drop UNIQUE constraint on file_lyric_path.
+            // Two audio files with the same base name (e.g. song.flac + song.mp3)
+            // legitimately share the same .lrc file, so the constraint was wrong.
+            try db.transaction {
+                try db.run("""
+                    CREATE TABLE IF NOT EXISTS songs_v1 (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        file_track_path TEXT NOT NULL UNIQUE,
+                        file_track_name TEXT NOT NULL,
+                        file_lyric_path TEXT,
+                        file_lyric_name TEXT,
+                        title TEXT NOT NULL,
+                        artist TEXT NOT NULL,
+                        album TEXT NOT NULL,
+                        duration REAL NOT NULL,
+                        track_number INTEGER,
+                        lyrics TEXT,
+                        instrumental INTEGER NOT NULL,
+                        last_modified REAL NOT NULL,
+                        is_synced_lyrics INTEGER NOT NULL
+                    )
+                    """)
+                try db.run("INSERT OR IGNORE INTO songs_v1 SELECT * FROM songs")
+                try db.run("DROP TABLE songs")
+                try db.run("ALTER TABLE songs_v1 RENAME TO songs")
+            }
+            try db.run("PRAGMA user_version = 1")
+        }
     }
 }
 
