@@ -91,8 +91,7 @@ struct LibraryScannerScanTests {
             title: "Pre-existing Track",
             artist: "Artist", album: "Album",
             duration: 120.0, trackNumber: nil,
-            lyrics: nil, instrumental: false,
-            isSyncedLyrics: false,
+            lyrics: nil, lyricType: nil,
             lastModified: modDate.addingTimeInterval(60)
         )
         try db.insertOrUpdateSong(preInserted)
@@ -143,8 +142,7 @@ struct LibraryScannerScanTests {
             title: "Stale Track",
             artist: "Artist", album: "Album",
             duration: 120.0, trackNumber: nil,
-            lyrics: nil, instrumental: false,
-            isSyncedLyrics: false,
+            lyrics: nil, lyricType: nil,
             lastModified: Date(timeIntervalSince1970: 0)
         )
         try db.insertOrUpdateSong(staleTrack)
@@ -662,8 +660,7 @@ struct LibraryScannerScanLibraryTests {
             duration: 200.0,
             trackNumber: nil,
             lyrics: nil,
-            instrumental: false,
-            isSyncedLyrics: false,
+            lyricType: nil,
             lastModified: Date.distantFuture
         )
         try db.insertOrUpdateSong(preInserted)
@@ -858,9 +855,9 @@ struct LibraryScannerBuildTrackTests {
         #expect(track.fileTrackName == "track.flac")
     }
 
-    // MARK: Lyrics and isSyncedLyrics
+    // MARK: Lyrics and lyricType
 
-    @Test("lyrics is nil and isSyncedLyrics is false when no lrc file exists")
+    @Test("lyrics is nil and lyricType is nil when no lrc file exists")
     func noLrcFile() throws {
         let dir = try makeTempDir()
         defer { try? FileManager.default.removeItem(at: dir) }
@@ -868,12 +865,12 @@ struct LibraryScannerBuildTrackTests {
         let path = dir.appendingPathComponent("song.mp3").path
         let track = scanner.buildTrack(tags: [:], format: [:], path: path)
         #expect(track.lyrics == nil)
-        #expect(track.isSyncedLyrics == false)
+        #expect(track.lyricType == nil)
         #expect(track.fileLyricPath == nil)
         #expect(track.fileLyricName == nil)
     }
 
-    @Test("synced lrc file is loaded and isSyncedLyrics is true")
+    @Test("synced lrc file is loaded and lyricType is .synced")
     func syncedLrcFile() throws {
         let dir = try makeTempDir()
         defer { try? FileManager.default.removeItem(at: dir) }
@@ -884,12 +881,12 @@ struct LibraryScannerBuildTrackTests {
 
         let track = scanner.buildTrack(tags: [:], format: [:], path: audioPath)
         #expect(track.lyrics == lrcContent)
-        #expect(track.isSyncedLyrics == true)
+        #expect(track.lyricType == .synced)
         #expect(track.fileLyricName == "song.lrc")
         #expect(track.fileLyricPath?.hasSuffix("song.lrc") == true)
     }
 
-    @Test("plain lrc file is loaded but isSyncedLyrics is false")
+    @Test("plain lrc file is loaded and lyricType is .plain")
     func plainLrcFile() throws {
         let dir = try makeTempDir()
         defer { try? FileManager.default.removeItem(at: dir) }
@@ -900,6 +897,6 @@ struct LibraryScannerBuildTrackTests {
 
         let track = scanner.buildTrack(tags: [:], format: [:], path: audioPath)
         #expect(track.lyrics == lrcContent)
-        #expect(track.isSyncedLyrics == false)
+        #expect(track.lyricType == .plain)
     }
 }

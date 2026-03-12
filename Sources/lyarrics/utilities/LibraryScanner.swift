@@ -204,11 +204,12 @@ final class LibraryScanner: @unchecked Sendable {
         let lrcName = lrcPath.lastPathComponent
 
         // Synced lyrics contain timecodes like [00:16.41]
-        let isSynced: Bool
+        let resolvedLyricType: LyricType?
         if let lyrics = lyrics {
-            isSynced = lyrics.range(of: #"\[\d{2}:\d{2}\.\d{2}\]"#, options: .regularExpression) != nil
+            let isSynced = lyrics.range(of: #"\[\d{2}:\d{2}\.\d{2}\]"#, options: .regularExpression) != nil
+            resolvedLyricType = isSynced ? .synced : .plain
         } else {
-            isSynced = false
+            resolvedLyricType = nil
         }
 
         return Track(
@@ -222,8 +223,7 @@ final class LibraryScanner: @unchecked Sendable {
             duration: duration,
             trackNumber: trackNumber,
             lyrics: lyrics,
-            instrumental: false,
-            isSyncedLyrics: isSynced,
+            lyricType: resolvedLyricType,
             lastModified: Date()
         )
     }

@@ -11,7 +11,6 @@ struct Track: Codable {
     let duration: Double
     let trackNumber: Int?
     let lyrics: String?
-    let instrumental: Bool
-    let isSyncedLyrics: Bool
+    let lyricType: LyricType?
     let lastModified: Date
 }

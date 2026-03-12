@@ -33,8 +33,8 @@ actor RateLimiter {
 // MARK: - Fetch Outcome
 
 enum FetchOutcome: Sendable {
-    case synced(content: String, lrcURL: URL, isInstrumental: Bool)
-    case plain(content: String, lrcURL: URL, isInstrumental: Bool)
+    case synced(content: String, lrcURL: URL)
+    case plain(content: String, lrcURL: URL)
     case instrumental
     case noLyrics
     case notFound
@@ -152,14 +152,13 @@ struct Fetch: AsyncParsableCommand {
             for try await (track, outcome) in group {
                 var statusTag = ""
                 switch outcome {
-                case .synced(let content, let lrcURL, let isInstrumental):
+                case .synced(let content, let lrcURL):
                     if !dryRun {
                         try content.write(to: lrcURL, atomically: true, encoding: .utf8)
                         try database.updateSongLyrics(
                             trackPath: track.fileTrackPath,
                             lyricsContent: content,
-                            isSynced: true,
-                            isInstrumental: isInstrumental,
+                            lyricType: .synced,
                             lyricPath: lrcURL.path,
                             lyricName: lrcURL.lastPathComponent
                         )
@@ -168,14 +167,13 @@ struct Fetch: AsyncParsableCommand {
                     statusTag = "[synced]"
                     fetched += 1
 
-                case .plain(let content, let lrcURL, let isInstrumental):
+                case .plain(let content, let lrcURL):
                     if !dryRun {
                         try content.write(to: lrcURL, atomically: true, encoding: .utf8)
                         try database.updateSongLyrics(
                             trackPath: track.fileTrackPath,
                             lyricsContent: content,
-                            isSynced: false,
-                            isInstrumental: isInstrumental,
+                            lyricType: .plain,
                             lyricPath: lrcURL.path,
                             lyricName: lrcURL.lastPathComponent
                         )
@@ -189,8 +187,7 @@ struct Fetch: AsyncParsableCommand {
                         try database.updateSongLyrics(
                             trackPath: track.fileTrackPath,
                             lyricsContent: nil,
-                            isSynced: false,
-                            isInstrumental: true,
+                            lyricType: .instrumental,
                             lyricPath: nil,
                             lyricName: nil
                         )
@@ -286,9 +283,9 @@ struct Fetch: AsyncParsableCommand {
             let lrcURL = trackURL.deletingPathExtension().appendingPathExtension("lrc")
 
             if let syncedLyrics = record.syncedLyrics {
-                return (track, .synced(content: syncedLyrics, lrcURL: lrcURL, isInstrumental: record.instrumental))
+                return (track, .synced(content: syncedLyrics, lrcURL: lrcURL))
             } else if let plainLyrics = record.plainLyrics {
-                return (track, .plain(content: plainLyrics, lrcURL: lrcURL, isInstrumental: record.instrumental))
+                return (track, .plain(content: plainLyrics, lrcURL: lrcURL))
             } else if record.instrumental {
                 return (track, .instrumental)
             } else {

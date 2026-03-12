@@ -22,8 +22,7 @@ func makeLyarricsTrack(
         duration: duration,
         trackNumber: nil,
         lyrics: nil,
-        instrumental: false,
-        isSyncedLyrics: false,
+        lyricType: nil,
         lastModified: Date()
     )
 }
