@@ -2,6 +2,11 @@ import ArgumentParser
 import LRCLib
 import Foundation
 import Logging
+#if canImport(Glibc)
+import Glibc
+#else
+import Darwin
+#endif
 
 // MARK: - Rate Limiter
 
@@ -25,7 +30,7 @@ actor RateLimiter {
         lastRequest = nextAllowed > now ? nextAllowed : now
         let sleepSeconds = nextAllowed.timeIntervalSince(now)
         if sleepSeconds > 0 {
-            try await Task.sleep(nanoseconds: UInt64(sleepSeconds * 1_000_000_000))
+            try await Task.sleep(for: .seconds(sleepSeconds))
         }
     }
 }
@@ -70,6 +75,21 @@ struct Fetch: AsyncParsableCommand {
     @Option(name: .long, help: "Maximum number of songs to fetch lyrics for (omit for all)")
     var limit: Int? = nil
 
+    @Flag(name: .long, help: "Also re-fetch songs that already have plain (unsynced) lyrics, in case a synced version is now available")
+    var upgradePlain: Bool = false
+
+    mutating func validate() throws {
+        guard maxRetries >= 1 else {
+            throw ValidationError("--max-retries must be at least 1.")
+        }
+        guard concurrency >= 1 else {
+            throw ValidationError("--concurrency must be at least 1.")
+        }
+        guard delay >= 0 else {
+            throw ValidationError("--delay must be zero or greater.")
+        }
+    }
+
     func run() async throws {
         let logger = Self.logger
 
@@ -80,12 +100,15 @@ struct Fetch: AsyncParsableCommand {
             let scanner = LibraryScanner(musicDirectory: musicDirectory, database: database)
             print("Scanning library at \(scanPath)...")
             logger.info("Scanning library at \(scanPath)")
-            try await scanner.scanLibrary()
+            let failures = try await scanner.scanLibrary()
             logger.info("Scan complete")
             print("Scan complete.")
+            if !failures.isEmpty {
+                print("Failed to read \(failures.count) file(s) during scan.")
+            }
         }
 
-        var songsNeedingLyrics = try database.getSongsNeedingLyrics()
+        var songsNeedingLyrics = try database.getSongsNeedingLyrics(includePlain: upgradePlain)
         if let limit {
             songsNeedingLyrics = Array(songsNeedingLyrics.prefix(limit))
         }
@@ -137,11 +160,20 @@ struct Fetch: AsyncParsableCommand {
         var decodingErrorCount = 0
         var unknownErrorCount = 0
 
+        // Defensive clamp: validate() rejects non-positive values from the CLI, but this
+        // method is also called directly in tests, so guard against invalid Swift ranges here too.
+        let effectiveConcurrency = Swift.max(1, concurrency)
+
+        // A `\r`-driven progress bar only makes sense on an interactive terminal — piped to a
+        // log file (e.g. `docker logs`) it produces a wall of carriage-return-separated noise,
+        // so fall back to periodic plain-line updates when stdout isn't a TTY.
+        let isInteractive = isatty(STDOUT_FILENO) != 0
+
         try await withThrowingTaskGroup(of: (Track, FetchOutcome).self) { group in
             var trackIterator = songsNeedingLyrics.makeIterator()
 
-            // Seed the pool with up to `concurrency` initial tasks
-            for _ in 0..<min(concurrency, songsNeedingLyrics.count) {
+            // Seed the pool with up to `effectiveConcurrency` initial tasks
+            for _ in 0..<min(effectiveConcurrency, songsNeedingLyrics.count) {
                 guard let track = trackIterator.next() else { break }
                 group.addTask {
                     await self.fetchTrackOutcome(track: track, client: client, rateLimiter: rateLimiter, logger: logger)
@@ -163,7 +195,7 @@ struct Fetch: AsyncParsableCommand {
                             lyricName: lrcURL.lastPathComponent
                         )
                     }
-                    logger.info("[syncd] \(track.artist) - \(track.title) -> \(lrcURL.lastPathComponent)")
+                    logger.info("[synced] \(track.artist) - \(track.title) -> \(lrcURL.lastPathComponent)")
                     statusTag = "[synced]"
                     fetched += 1
 
@@ -225,14 +257,19 @@ struct Fetch: AsyncParsableCommand {
                 }
 
                 processed += 1
-                let terminalWidth = ProcessInfo.processInfo.environment["COLUMNS"].flatMap(Int.init) ?? 120
                 let line = "\(statusTag) (\(processed)/\(total)) \(track.artist) - \(track.title)"
-                let displayLine = line.count > terminalWidth
-                    ? String(line.prefix(terminalWidth - 1)) + "…"
-                    : line
-                let paddedLine = displayLine.padding(toLength: terminalWidth, withPad: " ", startingAt: 0)
-                print("\r\(paddedLine)", terminator: "")
-                fflush(nil)
+                if isInteractive {
+                    let terminalWidth = ProcessInfo.processInfo.environment["COLUMNS"].flatMap(Int.init) ?? 120
+                    let displayLine = line.count > terminalWidth
+                        ? String(line.prefix(terminalWidth - 1)) + "…"
+                        : line
+                    let paddedLine = displayLine.padding(toLength: terminalWidth, withPad: " ", startingAt: 0)
+                    print("\r\(paddedLine)", terminator: "")
+                    fflush(nil)
+                } else if processed == total || processed % 25 == 0 {
+                    print(line)
+                    fflush(nil)
+                }
 
                 // Replenish the pool as each result comes in
                 if let next = trackIterator.next() {
@@ -307,17 +344,42 @@ struct Fetch: AsyncParsableCommand {
     }
 
     func fetchWithRetry(client: LRCLibClient, song: Song, logger: Logger) async throws -> Record {
+        // Defensive clamp: validate() rejects maxRetries < 1 from the CLI, but this method
+        // is also called directly in tests, so guard against the invalid range 1...0 here too.
+        let totalAttempts = Swift.max(1, maxRetries)
         var lastError: Error?
-        for attempt in 1...maxRetries {
+        for attempt in 1...totalAttempts {
             do {
                 return try await client.getLyrics(song: song)
+            } catch let error as LRCError where isRetryableStatusCode(error) {
+                lastError = error
+                try await sleepBeforeRetry(attempt: attempt, totalAttempts: totalAttempts, reason: String(describing: error), logger: logger)
             } catch let error where !(error is LRCError) {
                 lastError = error
-                let backoff = UInt64(attempt) * UInt64(delay) * 1_000_000
-                logger.warning("Transient error (attempt \(attempt)/\(maxRetries)), retrying in \(attempt * delay)ms: \(error.localizedDescription)")
-                try await Task.sleep(nanoseconds: backoff)
+                try await sleepBeforeRetry(attempt: attempt, totalAttempts: totalAttempts, reason: error.localizedDescription, logger: logger)
             }
         }
         throw lastError!
+    }
+
+    /// LRCLIB rate limiting (429) and server errors (5xx) are transient and worth retrying;
+    /// a 404 "not found" or an undocumented client error is not.
+    private func isRetryableStatusCode(_ error: LRCError) -> Bool {
+        guard case .undocumented(let statusCode, _) = error else { return false }
+        return statusCode == 429 || (500...599).contains(statusCode)
+    }
+
+    private func sleepBeforeRetry(attempt: Int, totalAttempts: Int, reason: String, logger: Logger) async throws {
+        // No point sleeping before the loop ends and `lastError` gets thrown anyway.
+        guard attempt < totalAttempts else {
+            logger.warning("Transient error (attempt \(attempt)/\(totalAttempts)), giving up: \(reason)")
+            return
+        }
+        // Overflow-safe: an extreme --max-retries/--delay combination could otherwise overflow
+        // Int multiplication and trap — the same crash class this file's other fixes eliminate.
+        let (product, overflowed) = attempt.multipliedReportingOverflow(by: delay)
+        let backoffMilliseconds = overflowed ? Int.max : product
+        logger.warning("Transient error (attempt \(attempt)/\(totalAttempts)), retrying in \(backoffMilliseconds)ms: \(reason)")
+        try await Task.sleep(for: .milliseconds(backoffMilliseconds))
     }
 }

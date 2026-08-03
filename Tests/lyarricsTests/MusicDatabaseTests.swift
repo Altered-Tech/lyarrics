@@ -171,14 +171,14 @@ struct MusicDatabaseTests {
 
     // MARK: Songs Needing Lyrics
 
-    @Test("getSongsNeedingLyrics returns tracks without synced lyrics")
+    @Test("getSongsNeedingLyrics defaults to only truly-missing tracks, excluding plain lyrics")
     func getSongsNeedingLyricsNoSynced() throws {
         let (db, tempDir) = try makeTestDatabase()
         defer { try? FileManager.default.removeItem(at: tempDir) }
 
         // Track with no lyrics at all
         let noLyrics = makeTrack(path: "/music/a.mp3", lyrics: nil)
-        // Track with plain (unsynced) lyrics
+        // Track with plain (unsynced) lyrics — should NOT appear by default (avoid re-fetching forever)
         let plainLyrics = makeTrack(path: "/music/b.mp3", lyrics: "Hello world", lyricType: .plain)
         // Track with synced lyrics — should NOT appear
         let syncedLyrics = makeTrack(path: "/music/c.mp3", lyrics: "[00:01.00] Hi", lyricType: .synced)
@@ -190,9 +190,27 @@ struct MusicDatabaseTests {
         let needing = try db.getSongsNeedingLyrics()
         let paths = needing.map(\.fileTrackPath)
         #expect(paths.contains("/music/a.mp3"))
-        #expect(paths.contains("/music/b.mp3"))
+        #expect(!paths.contains("/music/b.mp3"))
         #expect(!paths.contains("/music/c.mp3"))
         #expect(!paths.contains("/music/d.mp3"))
+    }
+
+    @Test("getSongsNeedingLyrics(includePlain: true) also returns plain-lyrics tracks")
+    func getSongsNeedingLyricsIncludePlain() throws {
+        let (db, tempDir) = try makeTestDatabase()
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let noLyrics = makeTrack(path: "/music/a.mp3", lyrics: nil)
+        let plainLyrics = makeTrack(path: "/music/b.mp3", lyrics: "Hello world", lyricType: .plain)
+        let syncedLyrics = makeTrack(path: "/music/c.mp3", lyrics: "[00:01.00] Hi", lyricType: .synced)
+
+        try db.insertOrUpdateSongs([noLyrics, plainLyrics, syncedLyrics])
+
+        let needing = try db.getSongsNeedingLyrics(includePlain: true)
+        let paths = needing.map(\.fileTrackPath)
+        #expect(paths.contains("/music/a.mp3"))
+        #expect(paths.contains("/music/b.mp3"))
+        #expect(!paths.contains("/music/c.mp3"))
     }
 
     @Test("getSongsNeedingLyrics returns empty when all tracks have synced lyrics")

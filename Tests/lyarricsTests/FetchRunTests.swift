@@ -7,6 +7,11 @@ import Logging
 
 // MARK: - Helpers
 
+/// Thrown by `SequencedMockAPIClient` when called more times than it was configured for.
+/// Reported via `Issue.record` so the failure reads as a normal assertion failure instead
+/// of an index-out-of-bounds trap.
+private struct UnexpectedExtraCallError: Error {}
+
 /// Returns responses in the order they were provided. Safe for sequential
 /// (concurrency=1) tests only — no locking on callCount.
 private final class SequencedMockAPIClient: APIProtocol, @unchecked Sendable {
@@ -20,6 +25,10 @@ private final class SequencedMockAPIClient: APIProtocol, @unchecked Sendable {
     func getLyrics(_ input: Operations.getLyrics.Input) async throws -> Operations.getLyrics.Output {
         let index = callCount
         callCount += 1
+        guard index < responses.count else {
+            Issue.record("SequencedMockAPIClient.getLyrics called \(callCount) time(s) but only \(responses.count) response(s) were configured")
+            throw UnexpectedExtraCallError()
+        }
         switch responses[index] {
         case .success(let output): return output
         case .failure(let error): throw error
@@ -409,6 +418,55 @@ struct FetchRunTests {
         )
 
         #expect(fetched == 5)
+        #expect(failed == 0)
+    }
+
+    @Test("does not crash with zero concurrency")
+    func zeroConcurrencyDoesNotCrash() async throws {
+        // Regression test: `0..<min(concurrency, count)` traps for concurrency <= 0
+        // (an invalid Swift range once concurrency goes negative). process() must clamp
+        // to at least one worker instead of relying on the CLI's validate() to catch it.
+        let (baseFetch, db, tempDir, tracks) = try makeFetchTestSetup(count: 2)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        var fetch = baseFetch
+        fetch.concurrency = 0
+
+        let mock = SequencedMockAPIClient(responses: [makeOkResponse(plainLyrics: "la la"), makeOkResponse(plainLyrics: "la la")])
+        let client = LRCLibClient(underlyingClient: mock)
+
+        let (fetched, failed) = try await fetch.process(
+            songsNeedingLyrics: tracks,
+            database: db,
+            client: client,
+            rateLimiter: rateLimiter,
+            logger: logger
+        )
+
+        #expect(fetched == 2)
+        #expect(failed == 0)
+    }
+
+    @Test("does not crash with negative concurrency")
+    func negativeConcurrencyDoesNotCrash() async throws {
+        let (baseFetch, db, tempDir, tracks) = try makeFetchTestSetup(count: 1)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        var fetch = baseFetch
+        fetch.concurrency = -3
+
+        let mock = SequencedMockAPIClient(responses: [makeOkResponse(plainLyrics: "la la")])
+        let client = LRCLibClient(underlyingClient: mock)
+
+        let (fetched, failed) = try await fetch.process(
+            songsNeedingLyrics: tracks,
+            database: db,
+            client: client,
+            rateLimiter: rateLimiter,
+            logger: logger
+        )
+
+        #expect(fetched == 1)
         #expect(failed == 0)
     }
 }

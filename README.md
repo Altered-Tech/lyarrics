@@ -35,6 +35,12 @@ lyarrics scan /path/to/music
 
 Fetch lyrics from LRCLIB for all songs in the database that are missing lyrics.
 
+> **Behavior change:** `fetch` used to also re-fetch songs that already had *plain*
+> (unsynced) lyrics on every run, trying to upgrade them to synced lyrics. That's no
+> longer the default — it was silently re-requesting the same songs from LRCLIB forever,
+> burning API calls for tracks that had already succeeded. Pass `--upgrade-plain` to get
+> the old behavior back.
+
 ```sh
 lyarrics fetch [options]
 
@@ -45,6 +51,8 @@ Options:
   --delay <ms>         Delay between requests in milliseconds (default: 500)
   --max-retries <n>    Retries for transient errors (default: 3)
   --dry-run            Preview what would be fetched without writing files
+  --upgrade-plain      Also re-fetch songs that already have plain (unsynced) lyrics,
+                       in case a synced version is now available (default: off)
 ```
 
 #### `search <artist> <album> <track> <duration>`

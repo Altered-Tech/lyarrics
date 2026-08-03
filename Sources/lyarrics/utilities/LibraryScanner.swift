@@ -1,18 +1,36 @@
 import Foundation
 import Logging
 
+/// A file that failed metadata extraction during a scan, and why.
+struct ScanFailure: Sendable {
+    let path: String
+    let reason: String
+}
+
 final class LibraryScanner: @unchecked Sendable {
     private let logger = Logger(label: "com.lyarrics.LibraryScanner")
     private let database: MusicDatabase
     private let musicDirectory: URL
-    private var erroredFiles: [String] = []
+    /// Resolved once at init instead of per-file — `extractMetadata` used to walk `PATH`
+    /// and stat every directory in it for every single track scanned.
+    ///
+    /// This is cached for the lifetime of the instance: if `ffprobe` is installed, removed,
+    /// or moved after this scanner is constructed, it won't be picked up until a new
+    /// `LibraryScanner` is created. Every current call site constructs a fresh instance per
+    /// scan, so this doesn't matter today — but a future long-lived caller (e.g. a daemon
+    /// that reuses one scanner across many scans) should construct a new instance per scan
+    /// rather than reuse one across an extended period.
+    private let ffprobeURL: URL?
 
     init(musicDirectory: URL, database: MusicDatabase) {
         self.musicDirectory = musicDirectory
         self.database = database
+        self.ffprobeURL = findExecutable("ffprobe")
     }
 
-    func scanLibrary(onProgress: ((Int, Int) -> Void)? = nil) async throws {
+    /// - Returns: the files that failed metadata extraction during the scan, and why.
+    @discardableResult
+    func scanLibrary(onProgress: ((Int, Int) -> Void)? = nil) async throws -> [ScanFailure] {
         logger.info("Starting library scan at \(self.musicDirectory.path)")
         let fileManager = FileManager.default
         if !fileManager.directoryExists(atPath: musicDirectory.path()) {
@@ -34,14 +52,14 @@ final class LibraryScanner: @unchecked Sendable {
 
         guard total > 0 else {
             logger.info("Nothing to do — library is up to date")
-            return
+            return []
         }
 
         // Process ffprobe calls in parallel, bounded by processor count
         let maxConcurrency = ProcessInfo.processInfo.processorCount
         logger.info("Extracting metadata using \(maxConcurrency) parallel workers")
         var tracksToInsert: [Track] = []
-        var errors: [String] = []
+        var errors: [ScanFailure] = []
         var index = 0
         var completed = 0
 
@@ -71,8 +89,8 @@ final class LibraryScanner: @unchecked Sendable {
                     tracksToInsert.append(track)
                     logger.info("[\(completed)/\(total)] Done: \(track.artist) — \(track.title)")
                 } else if let errorPath = errorPath {
-                    errors.append(errorPath)
                     let reason = errorReason ?? "unknown error"
+                    errors.append(ScanFailure(path: errorPath, reason: reason))
                     logger.error("[\(completed)/\(total)] Failed (\(reason))")
                 }
                 if index < total {
@@ -96,12 +114,12 @@ final class LibraryScanner: @unchecked Sendable {
         // Batch insert all new/changed tracks in a single transaction
         logger.info("Saving \(tracksToInsert.count) tracks to database...")
         try database.insertOrUpdateSongs(tracksToInsert)
-        erroredFiles = errors
 
         logger.info("Scan complete — \(tracksToInsert.count) saved, \(errors.count) failed")
-        for path in erroredFiles {
-            logger.warning("Failed: \(path)")
+        for failure in errors {
+            logger.warning("Failed: \(failure.path) (\(failure.reason))")
         }
+        return errors
     }
 
     private func collectFilesToProcess(existingPaths: [String: Date]) -> [URL] {
@@ -138,7 +156,7 @@ final class LibraryScanner: @unchecked Sendable {
             throw TrackError.fileNotFound(path)
         }
         let process = Process()
-        guard let ffprobeURL = findExecutable("ffprobe") else {
+        guard let ffprobeURL else {
             throw TrackError.executableNotFound("ffprobe")
         }
         process.executableURL = ffprobeURL

@@ -157,6 +157,23 @@ class MusicDatabase {
 }
 
 extension MusicDatabase {
+    private func rowToTrack(_ row: Row) -> Track {
+        Track(
+            fileTrackPath: row[fileTrackPath],
+            fileTrackName: row[fileTrackName],
+            fileLyricPath: row[fileLyricPath],
+            fileLyricName: row[fileLyricName],
+            title: row[title],
+            artist: row[artist],
+            album: row[album],
+            duration: row[duration],
+            trackNumber: row[trackNumber],
+            lyrics: row[lyrics],
+            lyricType: row[lyricType].flatMap(LyricType.init(rawValue:)),
+            lastModified: row[lastModified]
+        )
+    }
+
     func insertOrUpdateSong(_ song: Track) throws {
         guard let db = db else {
             logger.error("Database connection is nil")
@@ -191,26 +208,7 @@ extension MusicDatabase {
         logger.info("Searching lyrics for: \(query)")
 
         let searchQuery = songs.filter(lyrics.like("%\(query)%"))
-        var results: [Track] = []
-
-        for row in try db.prepare(searchQuery) {
-            results.append(Track(
-                fileTrackPath: row[fileTrackPath],
-                fileTrackName: row[fileTrackName],
-                fileLyricPath: row[fileLyricPath],
-                fileLyricName: row[fileLyricName],
-                title: row[title],
-                artist: row[artist],
-                album: row[album],
-                duration: row[duration],
-                trackNumber: row[trackNumber],
-                lyrics: row[lyrics],
-                lyricType: row[lyricType].flatMap(LyricType.init(rawValue:)),
-                lastModified: row[lastModified]
-            ))
-        }
-
-        return results
+        return try db.prepare(searchQuery).map(rowToTrack)
     }
 
     func getSongByPath(_ path: String) throws -> Track? {
@@ -221,55 +219,23 @@ extension MusicDatabase {
         logger.debug("Looking up song by path: \(path)")
 
         let query = songs.filter(fileTrackPath == path).limit(1)
-
-        for row in try db.prepare(query) {
-            return Track(
-                fileTrackPath: row[fileTrackPath],
-                fileTrackName: row[fileTrackName],
-                fileLyricPath: row[fileLyricPath],
-                fileLyricName: row[fileLyricName],
-                title: row[title],
-                artist: row[artist],
-                album: row[album],
-                duration: row[duration],
-                trackNumber: row[trackNumber],
-                lyrics: row[lyrics],
-                lyricType: row[lyricType].flatMap(LyricType.init(rawValue:)),
-                lastModified: row[lastModified]
-            )
-        }
-
-        return nil
+        return try db.prepare(query).map(rowToTrack).first
     }
 
-    func getSongsNeedingLyrics() throws -> [Track] {
+    /// - Parameter includePlain: when `true`, also returns tracks that already have plain
+    ///   (unsynced) lyrics, so they can be re-fetched in case a synced version is now available.
+    ///   Defaults to `false` so a plain-lyrics track isn't re-requested from LRCLIB on every run.
+    func getSongsNeedingLyrics(includePlain: Bool = false) throws -> [Track] {
         guard let db = db else {
             logger.error("Database connection is nil")
             return []
         }
         logger.info("Fetching songs that need lyrics")
 
-        let query = songs.filter(lyricType == nil || lyricType == LyricType.plain.rawValue)
-        var results: [Track] = []
-
-        for row in try db.prepare(query) {
-            results.append(Track(
-                fileTrackPath: row[fileTrackPath],
-                fileTrackName: row[fileTrackName],
-                fileLyricPath: row[fileLyricPath],
-                fileLyricName: row[fileLyricName],
-                title: row[title],
-                artist: row[artist],
-                album: row[album],
-                duration: row[duration],
-                trackNumber: row[trackNumber],
-                lyrics: row[lyrics],
-                lyricType: row[lyricType].flatMap(LyricType.init(rawValue:)),
-                lastModified: row[lastModified]
-            ))
-        }
-
-        return results
+        let query = includePlain
+            ? songs.filter(lyricType == nil || lyricType == LyricType.plain.rawValue)
+            : songs.filter(lyricType == nil)
+        return try db.prepare(query).map(rowToTrack)
     }
 
     func updateSongLyrics(trackPath: String, lyricsContent: String?, lyricType newLyricType: LyricType?, lyricPath: String?, lyricName: String?) throws {
@@ -333,27 +299,7 @@ extension MusicDatabase {
             return []
         }
         logger.info("Fetching all songs")
-
-        var results: [Track] = []
-
-        for row in try db.prepare(songs) {
-            results.append(Track(
-                fileTrackPath: row[fileTrackPath],
-                fileTrackName: row[fileTrackName],
-                fileLyricPath: row[fileLyricPath],
-                fileLyricName: row[fileLyricName],
-                title: row[title],
-                artist: row[artist],
-                album: row[album],
-                duration: row[duration],
-                trackNumber: row[trackNumber],
-                lyrics: row[lyrics],
-                lyricType: row[lyricType].flatMap(LyricType.init(rawValue:)),
-                lastModified: row[lastModified]
-            ))
-        }
-
-        return results
+        return try db.prepare(songs).map(rowToTrack)
     }
 
     func getMusicDetails() throws -> MusicDetails? {

@@ -573,15 +573,18 @@ struct LibraryScannerScanLibraryTests {
         let (scanner, db) = try makeScanner(directory: tempDir)
 
         // Empty file — ffprobe will fail to parse it, triggering the error branch
-        FileManager.default.createFile(
-            atPath: tempDir.appendingPathComponent("bad.mp3").path,
-            contents: nil
-        )
+        let badFilePath = tempDir.appendingPathComponent("bad.mp3").path
+        FileManager.default.createFile(atPath: badFilePath, contents: nil)
 
-        try await scanner.scanLibrary()
+        let failures = try await scanner.scanLibrary()
 
         let songs = try db.getAllSongs()
         #expect(songs.isEmpty)
+        // Compare by suffix, not exact path: macOS's temp dir (`/var/folders/...`) is a
+        // symlink to `/private/var/folders/...`, and the scanner's enumerator reports the
+        // resolved path while `badFilePath` above was built from the unresolved one.
+        #expect(failures.contains { $0.path.hasSuffix("/bad.mp3") })
+        #expect(failures.allSatisfy { !$0.reason.isEmpty })
     }
 
     // MARK: Continuation block (lines 75-89) — requires total > processorCount
