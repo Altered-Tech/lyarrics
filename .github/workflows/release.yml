@@ -5,10 +5,15 @@ on:
     workflows: ["Version"]
     types: [completed]
 
+permissions:
+  contents: read
+
 jobs:
   check:
     if: github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     outputs:
       has_release: ${{ steps.tag.outputs.has_release }}
       tag: ${{ steps.tag.outputs.name }}
@@ -41,6 +46,8 @@ jobs:
     needs: check
     if: needs.check.outputs.has_release == 'true'
     continue-on-error: true
+    permissions:
+      contents: read
     strategy:
       matrix:
         include:
@@ -55,6 +62,14 @@ jobs:
         with:
           swift-version: "6.2"
           skip-verify-signature: true
+
+      - name: Cache SwiftPM dependencies
+        uses: actions/cache@v4
+        with:
+          path: .build
+          key: ${{ runner.os }}-${{ matrix.arch }}-swiftpm-release-${{ hashFiles('Package.resolved') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.arch }}-swiftpm-release-
 
       - name: Inject version
         run: |
@@ -78,6 +93,8 @@ jobs:
     needs: check
     if: needs.check.outputs.has_release == 'true'
     continue-on-error: true
+    permissions:
+      contents: read
     strategy:
       matrix:
         include:
@@ -94,6 +111,14 @@ jobs:
         with:
           swift-version: "6.2"
           skip-verify-signature: true
+
+      - name: Cache SwiftPM dependencies
+        uses: actions/cache@v4
+        with:
+          path: .build
+          key: ${{ runner.os }}-${{ matrix.arch }}-swiftpm-release-${{ hashFiles('Package.resolved') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.arch }}-swiftpm-release-
 
       - name: Inject version
         run: |
@@ -131,7 +156,7 @@ jobs:
             NOTES="${NOTES}> [!WARNING]\n> Linux builds failed — binaries not included in this release.\n\n"
           fi
           if [ -n "$NOTES" ]; then
-            printf "$NOTES" > failure-notes.md
+            printf '%s' "$NOTES" > failure-notes.md
             echo "has_failures=true" >> $GITHUB_OUTPUT
           else
             echo "has_failures=false" >> $GITHUB_OUTPUT
@@ -145,7 +170,11 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.check.outputs.tag }}
-          generate_release_notes: true
+          # Deliberately omitting generate_release_notes: the "Version" workflow's
+          # semantic-release run already created this release with conventional-commit-based
+          # notes (@semantic-release/release-notes-generator). Setting this here appended
+          # GitHub's generic auto-generated "What's Changed" notes after them on every release
+          # (confirmed via `gh release view`), duplicating the same information.
           append_body: ${{ steps.notes.outputs.has_failures == 'true' }}
           body_path: ${{ steps.notes.outputs.has_failures == 'true' && 'failure-notes.md' || '' }}
           fail_on_unmatched_files: false

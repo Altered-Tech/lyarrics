@@ -11,6 +11,11 @@ private struct TransientError: Error, LocalizedError {
     var errorDescription: String? { "Transient network error" }
 }
 
+/// Thrown by `SequencedMockAPIClient` when called more times than it was configured for —
+/// e.g. if retry logic wrongly retries something it shouldn't. Reported via `Issue.record`
+/// so the failure reads as a normal assertion failure instead of an index-out-of-bounds trap.
+private struct UnexpectedExtraCallError: Error {}
+
 /// A mock that returns a pre-configured sequence of responses in order.
 private final class SequencedMockAPIClient: APIProtocol, @unchecked Sendable {
     private let responses: [Result<Operations.getLyrics.Output, Error>]
@@ -23,6 +28,10 @@ private final class SequencedMockAPIClient: APIProtocol, @unchecked Sendable {
     func getLyrics(_ input: Operations.getLyrics.Input) async throws -> Operations.getLyrics.Output {
         let index = callCount
         callCount += 1
+        guard index < responses.count else {
+            Issue.record("SequencedMockAPIClient.getLyrics called \(callCount) time(s) but only \(responses.count) response(s) were configured")
+            throw UnexpectedExtraCallError()
+        }
         switch responses[index] {
         case .success(let output): return output
         case .failure(let error): throw error
@@ -72,6 +81,10 @@ private func makeNotFoundOutput() -> Result<Operations.getLyrics.Output, Error> 
     .success(.notFound(.init(body: .json(
         Components.Schemas._Error(statusCode: 404, message: "Not found", name: "TrackNotFound")
     ))))
+}
+
+private func makeUndocumentedOutput(statusCode: Int) -> Result<Operations.getLyrics.Output, Error> {
+    .success(.undocumented(statusCode: statusCode, .init()))
 }
 
 private func makeSong() -> Song {
@@ -140,10 +153,68 @@ struct FetchWithRetryTests {
         #expect(mock.callCount == 3)
     }
 
-    @Test("does not retry LRCError — propagates immediately")
+    @Test("does not retry LRCError.notFound — propagates immediately")
     func doesNotRetryLRCError() async throws {
         let mock = SequencedMockAPIClient(responses: [
             makeNotFoundOutput(),
+        ])
+        let client = LRCLibClient(underlyingClient: mock)
+        let fetch = makeFetch(maxRetries: 3)
+
+        await #expect(throws: LRCError.self) {
+            try await fetch.fetchWithRetry(client: client, song: makeSong(), logger: Logger(label: "test"))
+        }
+        #expect(mock.callCount == 1)
+    }
+
+    @Test("does not crash and behaves as a single attempt when maxRetries is 0")
+    func maxRetriesZeroDoesNotCrash() async throws {
+        // Regression test: `for attempt in 1...maxRetries` traps when maxRetries is 0
+        // (an invalid Swift range). fetchWithRetry must clamp to at least one attempt.
+        let mock = SequencedMockAPIClient(responses: [makeOkOutput()])
+        let client = LRCLibClient(underlyingClient: mock)
+        let fetch = makeFetch(maxRetries: 0)
+
+        let record = try await fetch.fetchWithRetry(client: client, song: makeSong(), logger: Logger(label: "test"))
+
+        #expect(record.trackName == "Bohemian Rhapsody")
+        #expect(mock.callCount == 1)
+    }
+
+    @Test("retries on a 429 rate-limit response then succeeds")
+    func retriesOn429ThenSucceeds() async throws {
+        let mock = SequencedMockAPIClient(responses: [
+            makeUndocumentedOutput(statusCode: 429),
+            makeOkOutput(),
+        ])
+        let client = LRCLibClient(underlyingClient: mock)
+        let fetch = makeFetch(maxRetries: 3)
+
+        let record = try await fetch.fetchWithRetry(client: client, song: makeSong(), logger: Logger(label: "test"))
+
+        #expect(record.trackName == "Bohemian Rhapsody")
+        #expect(mock.callCount == 2)
+    }
+
+    @Test("retries on a 503 server error response then succeeds")
+    func retriesOn503ThenSucceeds() async throws {
+        let mock = SequencedMockAPIClient(responses: [
+            makeUndocumentedOutput(statusCode: 503),
+            makeOkOutput(),
+        ])
+        let client = LRCLibClient(underlyingClient: mock)
+        let fetch = makeFetch(maxRetries: 3)
+
+        let record = try await fetch.fetchWithRetry(client: client, song: makeSong(), logger: Logger(label: "test"))
+
+        #expect(record.trackName == "Bohemian Rhapsody")
+        #expect(mock.callCount == 2)
+    }
+
+    @Test("does not retry a non-retryable undocumented status code")
+    func doesNotRetryNonRetryableStatusCode() async throws {
+        let mock = SequencedMockAPIClient(responses: [
+            makeUndocumentedOutput(statusCode: 400),
         ])
         let client = LRCLibClient(underlyingClient: mock)
         let fetch = makeFetch(maxRetries: 3)
