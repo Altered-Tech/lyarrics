@@ -78,6 +78,9 @@ struct Fetch: AsyncParsableCommand {
     @Flag(name: .long, help: "Also re-fetch songs that already have plain (unsynced) lyrics, in case a synced version is now available")
     var upgradePlain: Bool = false
 
+    @Flag(name: .long, help: "Also re-check songs previously confirmed not found on LRCLIB or with no lyrics available, in case LRCLIB's catalog has since been updated")
+    var recheckUnresolved: Bool = false
+
     mutating func validate() throws {
         guard maxRetries >= 1 else {
             throw ValidationError("--max-retries must be at least 1.")
@@ -108,7 +111,7 @@ struct Fetch: AsyncParsableCommand {
             }
         }
 
-        var songsNeedingLyrics = try database.getSongsNeedingLyrics(includePlain: upgradePlain)
+        var songsNeedingLyrics = try database.getSongsNeedingLyrics(includePlain: upgradePlain, includeUnresolved: recheckUnresolved)
         if let limit {
             songsNeedingLyrics = Array(songsNeedingLyrics.prefix(limit))
         }
@@ -229,11 +232,29 @@ struct Fetch: AsyncParsableCommand {
                     fetched += 1
 
                 case .noLyrics:
+                    if !dryRun {
+                        try database.updateSongLyrics(
+                            trackPath: track.fileTrackPath,
+                            lyricsContent: nil,
+                            lyricType: .noLyricsAvailable,
+                            lyricPath: nil,
+                            lyricName: nil
+                        )
+                    }
                     logger.warning("[none] \(track.artist) - \(track.title)")
                     statusTag = "[none  ]"
                     fetched += 1
 
                 case .notFound:
+                    if !dryRun {
+                        try database.updateSongLyrics(
+                            trackPath: track.fileTrackPath,
+                            lyricsContent: nil,
+                            lyricType: .notFound,
+                            lyricPath: nil,
+                            lyricName: nil
+                        )
+                    }
                     logger.warning("Not found on LRCLIB: \(track.artist) - \(track.title)")
                     statusTag = "[miss  ]"
                     notFoundCount += 1

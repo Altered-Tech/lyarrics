@@ -225,6 +225,93 @@ struct MusicDatabaseTests {
         #expect(needing.isEmpty)
     }
 
+    @Test("getSongsNeedingLyrics excludes notFound/noLyricsAvailable tracks by default")
+    func getSongsNeedingLyricsExcludesUnresolvedByDefault() throws {
+        // Regression test: notFound/noLyricsAvailable must not be re-queried on every
+        // fetch run the way a never-attempted (nil) track is.
+        let (db, tempDir) = try makeTestDatabase()
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let neverAttempted = makeTrack(path: "/music/a.mp3", lyrics: nil)
+        let notFound = makeTrack(path: "/music/b.mp3", lyrics: nil, lyricType: .notFound)
+        let noLyricsAvailable = makeTrack(path: "/music/c.mp3", lyrics: nil, lyricType: .noLyricsAvailable)
+
+        try db.insertOrUpdateSongs([neverAttempted, notFound, noLyricsAvailable])
+
+        let needing = try db.getSongsNeedingLyrics()
+        let paths = needing.map(\.fileTrackPath)
+        #expect(paths.contains("/music/a.mp3"))
+        #expect(!paths.contains("/music/b.mp3"))
+        #expect(!paths.contains("/music/c.mp3"))
+    }
+
+    @Test("getSongsNeedingLyrics(includeUnresolved: true) also returns notFound/noLyricsAvailable tracks")
+    func getSongsNeedingLyricsIncludeUnresolved() throws {
+        let (db, tempDir) = try makeTestDatabase()
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let neverAttempted = makeTrack(path: "/music/a.mp3", lyrics: nil)
+        let notFound = makeTrack(path: "/music/b.mp3", lyrics: nil, lyricType: .notFound)
+        let noLyricsAvailable = makeTrack(path: "/music/c.mp3", lyrics: nil, lyricType: .noLyricsAvailable)
+        let synced = makeTrack(path: "/music/d.mp3", lyrics: "[00:01.00] Hi", lyricType: .synced)
+
+        try db.insertOrUpdateSongs([neverAttempted, notFound, noLyricsAvailable, synced])
+
+        let needing = try db.getSongsNeedingLyrics(includeUnresolved: true)
+        let paths = needing.map(\.fileTrackPath)
+        #expect(paths.contains("/music/a.mp3"))
+        #expect(paths.contains("/music/b.mp3"))
+        #expect(paths.contains("/music/c.mp3"))
+        #expect(!paths.contains("/music/d.mp3"))
+    }
+
+    @Test("getSongsNeedingLyrics(includePlain: true, includeUnresolved: true) combines both")
+    func getSongsNeedingLyricsCombinedFlags() throws {
+        let (db, tempDir) = try makeTestDatabase()
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let plain = makeTrack(path: "/music/a.mp3", lyrics: "Hello", lyricType: .plain)
+        let notFound = makeTrack(path: "/music/b.mp3", lyrics: nil, lyricType: .notFound)
+        let synced = makeTrack(path: "/music/c.mp3", lyrics: "[00:01.00] Hi", lyricType: .synced)
+
+        try db.insertOrUpdateSongs([plain, notFound, synced])
+
+        let needing = try db.getSongsNeedingLyrics(includePlain: true, includeUnresolved: true)
+        let paths = needing.map(\.fileTrackPath)
+        #expect(paths.contains("/music/a.mp3"))
+        #expect(paths.contains("/music/b.mp3"))
+        #expect(!paths.contains("/music/c.mp3"))
+    }
+
+    // MARK: Music Details
+
+    @Test("getMusicDetails categorizes notFound/noLyricsAvailable separately from missing")
+    func getMusicDetailsCategorizesNewStates() throws {
+        let (db, tempDir) = try makeTestDatabase()
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        try db.insertOrUpdateSongs([
+            makeTrack(path: "/music/missing.mp3", lyrics: nil),
+            makeTrack(path: "/music/notfound.mp3", lyrics: nil, lyricType: .notFound),
+            makeTrack(path: "/music/nolyrics.mp3", lyrics: nil, lyricType: .noLyricsAvailable),
+            makeTrack(path: "/music/synced.mp3", lyrics: "[00:01.00] Hi", lyricType: .synced),
+            makeTrack(path: "/music/plain.mp3", lyrics: "Hi", lyricType: .plain),
+            makeTrack(path: "/music/instrumental.mp3", lyrics: nil, lyricType: .instrumental),
+        ])
+
+        let details = try db.getMusicDetails()
+        #expect(details?.songs == 6)
+        #expect(details?.missing == 1)
+        #expect(details?.notFound == 1)
+        #expect(details?.noLyricsAvailable == 1)
+        #expect(details?.sync == 1)
+        #expect(details?.plain == 1)
+        #expect(details?.instrumental == 1)
+        // "Lyrics" counts only actual usable content (synced/plain/instrumental),
+        // not notFound/noLyricsAvailable — those have no content, just a resolved status.
+        #expect(details?.lyrics == 3)
+    }
+
     // MARK: Search
 
     @Test("searchLyrics returns tracks matching lyric content")
