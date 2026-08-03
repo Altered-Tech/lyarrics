@@ -40,19 +40,26 @@ Fetch lyrics from LRCLIB for all songs in the database that are missing lyrics.
 > longer the default — it was silently re-requesting the same songs from LRCLIB forever,
 > burning API calls for tracks that had already succeeded. Pass `--upgrade-plain` to get
 > the old behavior back.
+>
+> A song that LRCLIB doesn't have, or that LRCLIB has but with no lyrics submitted for it,
+> is now recorded as such (`details` reports these as "Not Found on LRCLIB" / "No Lyrics
+> Available") instead of staying "missing" forever and being re-queried on every run. Pass
+> `--recheck-unresolved` to re-check them in case LRCLIB's catalog has since been updated.
 
 ```sh
 lyarrics fetch [options]
 
 Options:
-  --scan <path>        Scan a directory before fetching
-  --limit <n>          Maximum number of songs to fetch
-  --concurrency <n>    Number of concurrent requests (default: 5)
-  --delay <ms>         Delay between requests in milliseconds (default: 500)
-  --max-retries <n>    Retries for transient errors (default: 3)
-  --dry-run            Preview what would be fetched without writing files
-  --upgrade-plain      Also re-fetch songs that already have plain (unsynced) lyrics,
-                       in case a synced version is now available (default: off)
+  --scan <path>          Scan a directory before fetching
+  --limit <n>            Maximum number of songs to fetch
+  --concurrency <n>      Number of concurrent requests (default: 5)
+  --delay <ms>           Delay between requests in milliseconds (default: 500)
+  --max-retries <n>      Retries for transient errors (default: 3)
+  --dry-run              Preview what would be fetched without writing files
+  --upgrade-plain        Also re-fetch songs that already have plain (unsynced) lyrics,
+                         in case a synced version is now available (default: off)
+  --recheck-unresolved   Also re-check songs previously confirmed not found on LRCLIB or
+                         with no lyrics available (default: off)
 ```
 
 #### `search <artist> <album> <track> <duration>`

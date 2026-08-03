@@ -222,19 +222,35 @@ extension MusicDatabase {
         return try db.prepare(query).map(rowToTrack).first
     }
 
-    /// - Parameter includePlain: when `true`, also returns tracks that already have plain
-    ///   (unsynced) lyrics, so they can be re-fetched in case a synced version is now available.
-    ///   Defaults to `false` so a plain-lyrics track isn't re-requested from LRCLIB on every run.
-    func getSongsNeedingLyrics(includePlain: Bool = false) throws -> [Track] {
+    /// - Parameters:
+    ///   - includePlain: when `true`, also returns tracks that already have plain (unsynced)
+    ///     lyrics, so they can be re-fetched in case a synced version is now available.
+    ///     Defaults to `false` so a plain-lyrics track isn't re-requested from LRCLIB on every run.
+    ///   - includeUnresolved: when `true`, also returns tracks previously confirmed absent from
+    ///     LRCLIB (`notFound`) or confirmed to have no lyrics submitted (`noLyricsAvailable`).
+    ///     Defaults to `false` for the same reason as `includePlain` — LRCLIB's catalog does grow
+    ///     over time, but re-checking every "we already looked, nothing there" track on every run
+    ///     would re-run the exact same doomed lookups forever.
+    func getSongsNeedingLyrics(includePlain: Bool = false, includeUnresolved: Bool = false) throws -> [Track] {
         guard let db = db else {
             logger.error("Database connection is nil")
             return []
         }
         logger.info("Fetching songs that need lyrics")
 
-        let query = includePlain
-            ? songs.filter(lyricType == nil || lyricType == LyricType.plain.rawValue)
-            : songs.filter(lyricType == nil)
+        var resolvedTypesToRecheck: [String] = []
+        if includePlain {
+            resolvedTypesToRecheck.append(LyricType.plain.rawValue)
+        }
+        if includeUnresolved {
+            resolvedTypesToRecheck.append(LyricType.notFound.rawValue)
+            resolvedTypesToRecheck.append(LyricType.noLyricsAvailable.rawValue)
+        }
+
+        // An empty `IN ()` is invalid SQL, so only add the clause when there's something to recheck.
+        let query = resolvedTypesToRecheck.isEmpty
+            ? songs.filter(lyricType == nil)
+            : songs.filter(lyricType == nil || resolvedTypesToRecheck.contains(lyricType))
         return try db.prepare(query).map(rowToTrack)
     }
 
@@ -315,7 +331,9 @@ extension MusicDatabase {
             plain: 0,
             sync: 0,
             instrumental: 0,
-            missing: 0
+            missing: 0,
+            notFound: 0,
+            noLyricsAvailable: 0
             )
 
         for row in try db.prepare(songs) {
@@ -330,6 +348,10 @@ extension MusicDatabase {
             case .instrumental:
                 details.lyrics += 1
                 details.instrumental += 1
+            case .notFound:
+                details.notFound += 1
+            case .noLyricsAvailable:
+                details.noLyricsAvailable += 1
             case nil:
                 details.missing += 1
             }

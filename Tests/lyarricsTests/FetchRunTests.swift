@@ -217,8 +217,11 @@ struct FetchRunTests {
 
     // MARK: noLyrics outcome
 
-    @Test("noLyrics outcome increments fetched and does not update database")
+    @Test("noLyrics outcome increments fetched and marks the track noLyricsAvailable")
     func noLyricsOutcomeIncrementsFetchedOnly() async throws {
+        // Regression test: this used to leave lyricType == nil forever, which meant
+        // getSongsNeedingLyrics() would re-query the exact same doomed lookup on every
+        // future fetch run. It must now be marked resolved so it stops being re-queried.
         let (fetch, db, tempDir, tracks) = try makeFetchTestSetup(count: 1)
         defer { try? FileManager.default.removeItem(at: tempDir) }
 
@@ -238,13 +241,38 @@ struct FetchRunTests {
 
         let song = try db.getSongByPath(tracks[0].fileTrackPath)
         #expect(song?.lyrics == nil)
+        #expect(song?.lyricType == .noLyricsAvailable)
+    }
+
+    @Test("dryRun skips database update for noLyrics outcome")
+    func dryRunSkipsNoLyricsDatabaseUpdate() async throws {
+        let (baseFetch, db, tempDir, tracks) = try makeFetchTestSetup(count: 1)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        var fetch = baseFetch
+        fetch.dryRun = true
+
+        let mock = SequencedMockAPIClient(responses: [makeOkResponse()])
+        let client = LRCLibClient(underlyingClient: mock)
+
+        _ = try await fetch.process(
+            songsNeedingLyrics: tracks,
+            database: db,
+            client: client,
+            rateLimiter: rateLimiter,
+            logger: logger
+        )
+
+        let song = try db.getSongByPath(tracks[0].fileTrackPath)
         #expect(song?.lyricType == nil)
     }
 
     // MARK: notFound outcome
 
-    @Test("notFound outcome increments failed count")
+    @Test("notFound outcome increments failed count and marks the track notFound")
     func notFoundOutcomeIncrementsFailed() async throws {
+        // Regression test: same rationale as noLyrics above — a track LRCLIB doesn't
+        // have must be marked so it isn't re-queried forever on every future fetch run.
         let (fetch, db, tempDir, tracks) = try makeFetchTestSetup(count: 1)
         defer { try? FileManager.default.removeItem(at: tempDir) }
 
@@ -261,6 +289,32 @@ struct FetchRunTests {
 
         #expect(fetched == 0)
         #expect(failed == 1)
+
+        let song = try db.getSongByPath(tracks[0].fileTrackPath)
+        #expect(song?.lyricType == .notFound)
+    }
+
+    @Test("dryRun skips database update for notFound outcome")
+    func dryRunSkipsNotFoundDatabaseUpdate() async throws {
+        let (baseFetch, db, tempDir, tracks) = try makeFetchTestSetup(count: 1)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        var fetch = baseFetch
+        fetch.dryRun = true
+
+        let mock = SequencedMockAPIClient(responses: [makeNotFoundResponse()])
+        let client = LRCLibClient(underlyingClient: mock)
+
+        _ = try await fetch.process(
+            songsNeedingLyrics: tracks,
+            database: db,
+            client: client,
+            rateLimiter: rateLimiter,
+            logger: logger
+        )
+
+        let song = try db.getSongByPath(tracks[0].fileTrackPath)
+        #expect(song?.lyricType == nil)
     }
 
     // MARK: apiError outcome
