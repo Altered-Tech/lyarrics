@@ -6,6 +6,8 @@ services:
     container_name: lyarrics
     environment:
       LYARRICS_MUSIC_PATH: /music
+    ports:
+      - "8080:8080"
     volumes:
       - lyarrics-data:/data
       - ${MUSIC_PATH}:/music
