@@ -373,7 +373,14 @@ extension MusicDatabase {
             logger.error("Database connection is nil")
             return
         }
-        try db.transaction {
+        // Written out as explicit BEGIN/COMMIT/ROLLBACK rather than `db.transaction { ... }`:
+        // that convenience wrapper internally hops through a blocking `DispatchQueue.sync`
+        // (for thread-safety across concurrent `Connection` users), and Swift 6's strict
+        // concurrency checker flags a closure-within-that-closure capturing the non-Sendable
+        // `Connection` as risking a data race — even though this actor already serializes every
+        // caller, making that internal hop redundant here. Same atomicity, no closure nesting.
+        try db.run("BEGIN TRANSACTION")
+        do {
             for song in tracks {
                 let insert = songs.insert(
                     or: .replace,
@@ -392,6 +399,10 @@ extension MusicDatabase {
                 )
                 try db.run(insert)
             }
+            try db.run("COMMIT TRANSACTION")
+        } catch {
+            try db.run("ROLLBACK TRANSACTION")
+            throw error
         }
     }
 
