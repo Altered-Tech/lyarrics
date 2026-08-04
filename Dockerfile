@@ -89,5 +89,6 @@ RUN chmod +x /entrypoint.sh /usr/local/bin/lyarrics
 ENV LYARRICS_DB_PATH="/data/library.db"
 
 VOLUME ["/data"]
+EXPOSE 8080
 
 ENTRYPOINT ["/entrypoint.sh"]

@@ -120,6 +120,8 @@ services:
     container_name: lyarrics
     environment:
       LYARRICS_MUSIC_PATH: /music
+    ports:
+      - "8080:8080"
     volumes:
       - lyarrics-data:/data
       - ${MUSIC_PATH}:/music
@@ -134,9 +136,14 @@ Set `MUSIC_PATH` to your music library and start the container:
 MUSIC_PATH=/path/to/music docker compose up -d
 ```
 
+The web UI starts automatically and is reachable at `http://localhost:8080`. There's no
+authentication, so only publish that port on a network you trust — change the host side of the
+`ports` mapping (e.g. `"9090:8080"`) if you need a different port or to keep it unpublished.
+
 ### Running Commands
 
-The container keeps running and tails the log file. Run `lyarrics` subcommands via `docker exec`:
+Logs from the web server and any commands below all go to the same place. Run `lyarrics`
+subcommands via `docker exec`:
 
 ```sh
 docker exec lyarrics lyarrics scan            # path defaults to $LYARRICS_MUSIC_PATH (/music)
