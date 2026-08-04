@@ -23,9 +23,10 @@ lyarrics <subcommand> [options]
 
 ### Subcommands
 
-#### `scan <path>`
+#### `scan [path]`
 
-Scan a music directory and index all audio files into the local database.
+Scan a music directory and index all audio files into the local database. `path` can be omitted
+if the `LYARRICS_MUSIC_PATH` environment variable is set.
 
 ```sh
 lyarrics scan /path/to/music
@@ -70,13 +71,24 @@ Look up lyrics for a single song directly from LRCLIB.
 lyarrics search "Artist" "Album" "Track Title" 210
 ```
 
-#### `serve` WORK IN PROGRESS
+#### `serve`
 
-Start a local web server.
+Start a local web server for browsing your library and triggering scans/fetches from the browser.
 
 ```sh
 lyarrics serve [--hostname 127.0.0.1] [--port 8080]
 ```
+
+- `/` — dashboard with lyric-status counts and forms to start a scan or fetch
+- `/library` — searchable, filterable, paginated track list (`?q=`, `?status=`, `?page=`)
+- `/library/<id>` — a track's metadata and lyrics
+- `/settings` — set a default music library path, saved in the database so it pre-fills the
+  scan form; falls back to `LYARRICS_MUSIC_PATH` until you save one here
+- Only one scan or fetch job runs at a time; starting another while one is in progress is a
+  no-op until it finishes.
+
+There's no authentication, so only bind `--hostname` to `127.0.0.1` (the default) or a network
+you trust.
 
 #### `details`
 
@@ -106,6 +118,8 @@ services:
   lyarrics:
     image: ghcr.io/altered-tech/lyarrics:latest
     container_name: lyarrics
+    environment:
+      LYARRICS_MUSIC_PATH: /music
     volumes:
       - lyarrics-data:/data
       - ${MUSIC_PATH}:/music
@@ -125,7 +139,7 @@ MUSIC_PATH=/path/to/music docker compose up -d
 The container keeps running and tails the log file. Run `lyarrics` subcommands via `docker exec`:
 
 ```sh
-docker exec lyarrics lyarrics scan /music
+docker exec lyarrics lyarrics scan            # path defaults to $LYARRICS_MUSIC_PATH (/music)
 docker exec lyarrics lyarrics fetch --scan /music
 ```
 
@@ -140,6 +154,7 @@ docker logs lyarrics
 | Variable | Default | Description |
 |---|---|---|
 | `LYARRICS_DB_PATH` | `/data/library.db` | Path to the SQLite database |
+| `LYARRICS_MUSIC_PATH` | *(none)* | Default music directory for `scan` and the `serve` dashboard's scan form. Inside the container this is always `/music` (the volume mount target), which is why the sample `compose.yaml` sets it for you. |
 
 The `/data` volume persists the database across container restarts.
 

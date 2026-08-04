@@ -97,7 +97,7 @@ struct FetchRunTests {
 
     @Test("empty library returns zero counts")
     func emptyLibraryReturnsZeroCounts() async throws {
-        let (fetch, db, tempDir, _) = try makeFetchTestSetup(count: 0)
+        let (fetch, db, tempDir, _) = try await makeFetchTestSetup(count: 0)
         defer { try? FileManager.default.removeItem(at: tempDir) }
 
         let mock = SequencedMockAPIClient(responses: [])
@@ -120,7 +120,7 @@ struct FetchRunTests {
 
     @Test("synced outcome writes .lrc file and updates database")
     func syncedOutcomeWritesFileAndUpdatesDatabase() async throws {
-        let (fetch, db, tempDir, tracks) = try makeFetchTestSetup(count: 1)
+        let (fetch, db, tempDir, tracks) = try await makeFetchTestSetup(count: 1)
         defer { try? FileManager.default.removeItem(at: tempDir) }
 
         let syncedContent = "[00:00.28] Is this the real life?"
@@ -144,7 +144,7 @@ struct FetchRunTests {
         let written = try String(contentsOf: lrcURL, encoding: .utf8)
         #expect(written == syncedContent)
 
-        let updated = try db.getSongByPath(tracks[0].fileTrackPath)
+        let updated = try await db.getSongByPath(tracks[0].fileTrackPath)
         #expect(updated?.lyrics == syncedContent)
         #expect(updated?.lyricType == .synced)
         #expect(updated?.fileLyricPath == lrcURL.path)
@@ -155,7 +155,7 @@ struct FetchRunTests {
 
     @Test("plain outcome writes .lrc file and marks isSynced false in database")
     func plainOutcomeWritesFileAndUpdatesDatabase() async throws {
-        let (fetch, db, tempDir, tracks) = try makeFetchTestSetup(count: 1)
+        let (fetch, db, tempDir, tracks) = try await makeFetchTestSetup(count: 1)
         defer { try? FileManager.default.removeItem(at: tempDir) }
 
         let plainContent = "Is this the real life?"
@@ -179,7 +179,7 @@ struct FetchRunTests {
         let written = try String(contentsOf: lrcURL, encoding: .utf8)
         #expect(written == plainContent)
 
-        let updated = try db.getSongByPath(tracks[0].fileTrackPath)
+        let updated = try await db.getSongByPath(tracks[0].fileTrackPath)
         #expect(updated?.lyrics == plainContent)
         #expect(updated?.lyricType == .plain)
     }
@@ -188,7 +188,7 @@ struct FetchRunTests {
 
     @Test("instrumental outcome updates database and does not write .lrc file")
     func instrumentalOutcomeUpdatesDatabaseWithoutFile() async throws {
-        let (fetch, db, tempDir, tracks) = try makeFetchTestSetup(count: 1)
+        let (fetch, db, tempDir, tracks) = try await makeFetchTestSetup(count: 1)
         defer { try? FileManager.default.removeItem(at: tempDir) }
 
         let mock = SequencedMockAPIClient(responses: [makeOkResponse(instrumental: true)])
@@ -209,7 +209,7 @@ struct FetchRunTests {
             .deletingPathExtension().appendingPathExtension("lrc")
         #expect(!FileManager.default.fileExists(atPath: lrcURL.path))
 
-        let updated = try db.getSongByPath(tracks[0].fileTrackPath)
+        let updated = try await db.getSongByPath(tracks[0].fileTrackPath)
         #expect(updated?.lyricType == .instrumental)
         #expect(updated?.lyrics == nil)
         #expect(updated?.fileLyricPath == nil)
@@ -222,7 +222,7 @@ struct FetchRunTests {
         // Regression test: this used to leave lyricType == nil forever, which meant
         // getSongsNeedingLyrics() would re-query the exact same doomed lookup on every
         // future fetch run. It must now be marked resolved so it stops being re-queried.
-        let (fetch, db, tempDir, tracks) = try makeFetchTestSetup(count: 1)
+        let (fetch, db, tempDir, tracks) = try await makeFetchTestSetup(count: 1)
         defer { try? FileManager.default.removeItem(at: tempDir) }
 
         let mock = SequencedMockAPIClient(responses: [makeOkResponse()])
@@ -239,14 +239,14 @@ struct FetchRunTests {
         #expect(fetched == 1)
         #expect(failed == 0)
 
-        let song = try db.getSongByPath(tracks[0].fileTrackPath)
+        let song = try await db.getSongByPath(tracks[0].fileTrackPath)
         #expect(song?.lyrics == nil)
         #expect(song?.lyricType == .noLyricsAvailable)
     }
 
     @Test("dryRun skips database update for noLyrics outcome")
     func dryRunSkipsNoLyricsDatabaseUpdate() async throws {
-        let (baseFetch, db, tempDir, tracks) = try makeFetchTestSetup(count: 1)
+        let (baseFetch, db, tempDir, tracks) = try await makeFetchTestSetup(count: 1)
         defer { try? FileManager.default.removeItem(at: tempDir) }
 
         var fetch = baseFetch
@@ -263,7 +263,7 @@ struct FetchRunTests {
             logger: logger
         )
 
-        let song = try db.getSongByPath(tracks[0].fileTrackPath)
+        let song = try await db.getSongByPath(tracks[0].fileTrackPath)
         #expect(song?.lyricType == nil)
     }
 
@@ -273,7 +273,7 @@ struct FetchRunTests {
     func notFoundOutcomeIncrementsFailed() async throws {
         // Regression test: same rationale as noLyrics above — a track LRCLIB doesn't
         // have must be marked so it isn't re-queried forever on every future fetch run.
-        let (fetch, db, tempDir, tracks) = try makeFetchTestSetup(count: 1)
+        let (fetch, db, tempDir, tracks) = try await makeFetchTestSetup(count: 1)
         defer { try? FileManager.default.removeItem(at: tempDir) }
 
         let mock = SequencedMockAPIClient(responses: [makeNotFoundResponse()])
@@ -290,13 +290,13 @@ struct FetchRunTests {
         #expect(fetched == 0)
         #expect(failed == 1)
 
-        let song = try db.getSongByPath(tracks[0].fileTrackPath)
+        let song = try await db.getSongByPath(tracks[0].fileTrackPath)
         #expect(song?.lyricType == .notFound)
     }
 
     @Test("dryRun skips database update for notFound outcome")
     func dryRunSkipsNotFoundDatabaseUpdate() async throws {
-        let (baseFetch, db, tempDir, tracks) = try makeFetchTestSetup(count: 1)
+        let (baseFetch, db, tempDir, tracks) = try await makeFetchTestSetup(count: 1)
         defer { try? FileManager.default.removeItem(at: tempDir) }
 
         var fetch = baseFetch
@@ -313,7 +313,7 @@ struct FetchRunTests {
             logger: logger
         )
 
-        let song = try db.getSongByPath(tracks[0].fileTrackPath)
+        let song = try await db.getSongByPath(tracks[0].fileTrackPath)
         #expect(song?.lyricType == nil)
     }
 
@@ -321,7 +321,7 @@ struct FetchRunTests {
 
     @Test("apiError outcome increments failed count")
     func apiErrorOutcomeIncrementsFailed() async throws {
-        let (fetch, db, tempDir, tracks) = try makeFetchTestSetup(count: 1)
+        let (fetch, db, tempDir, tracks) = try await makeFetchTestSetup(count: 1)
         defer { try? FileManager.default.removeItem(at: tempDir) }
 
         let mock = SequencedMockAPIClient(responses: [makeUndocumentedResponse(statusCode: 503)])
@@ -343,7 +343,7 @@ struct FetchRunTests {
 
     @Test("decodingError outcome does not increment fetched or failed")
     func decodingErrorNotCounted() async throws {
-        let (fetch, db, tempDir, tracks) = try makeFetchTestSetup(count: 1)
+        let (fetch, db, tempDir, tracks) = try await makeFetchTestSetup(count: 1)
         defer { try? FileManager.default.removeItem(at: tempDir) }
 
         let mock = SequencedMockAPIClient(responses: [.failure(LRCError.decodingError(nil))])
@@ -365,7 +365,7 @@ struct FetchRunTests {
 
     @Test("dryRun skips .lrc file write and database update for synced lyrics")
     func dryRunSkipsSyncedWrite() async throws {
-        let (baseFetch, db, tempDir, tracks) = try makeFetchTestSetup(count: 1)
+        let (baseFetch, db, tempDir, tracks) = try await makeFetchTestSetup(count: 1)
         defer { try? FileManager.default.removeItem(at: tempDir) }
 
         var fetch = baseFetch
@@ -388,14 +388,14 @@ struct FetchRunTests {
             .deletingPathExtension().appendingPathExtension("lrc")
         #expect(!FileManager.default.fileExists(atPath: lrcURL.path))
 
-        let song = try db.getSongByPath(tracks[0].fileTrackPath)
+        let song = try await db.getSongByPath(tracks[0].fileTrackPath)
         #expect(song?.lyrics == nil)
         #expect(song?.lyricType == nil)
     }
 
     @Test("dryRun skips database update for instrumental")
     func dryRunSkipsInstrumentalDatabaseUpdate() async throws {
-        let (baseFetch, db, tempDir, tracks) = try makeFetchTestSetup(count: 1)
+        let (baseFetch, db, tempDir, tracks) = try await makeFetchTestSetup(count: 1)
         defer { try? FileManager.default.removeItem(at: tempDir) }
 
         var fetch = baseFetch
@@ -412,7 +412,7 @@ struct FetchRunTests {
             logger: logger
         )
 
-        let song = try db.getSongByPath(tracks[0].fileTrackPath)
+        let song = try await db.getSongByPath(tracks[0].fileTrackPath)
         #expect(song?.lyricType == nil)
     }
 
@@ -420,7 +420,7 @@ struct FetchRunTests {
 
     @Test("multiple tracks processed with correct fetched and failed counts")
     func multipleTracksProcessed() async throws {
-        let (fetch, db, tempDir, tracks) = try makeFetchTestSetup(count: 3)
+        let (fetch, db, tempDir, tracks) = try await makeFetchTestSetup(count: 3)
         defer { try? FileManager.default.removeItem(at: tempDir) }
 
         // Track 0 → synced, Track 1 → notFound, Track 2 → instrumental
@@ -446,7 +446,7 @@ struct FetchRunTests {
 
     @Test("all tracks processed when count exceeds concurrency")
     func allTracksProcessedWhenExceedsConcurrency() async throws {
-        let (baseFetch, db, tempDir, tracks) = try makeFetchTestSetup(count: 5)
+        let (baseFetch, db, tempDir, tracks) = try await makeFetchTestSetup(count: 5)
         defer { try? FileManager.default.removeItem(at: tempDir) }
 
         // Use a fixed mock (safe for concurrent access) with concurrency > 1
@@ -480,7 +480,7 @@ struct FetchRunTests {
         // Regression test: `0..<min(concurrency, count)` traps for concurrency <= 0
         // (an invalid Swift range once concurrency goes negative). process() must clamp
         // to at least one worker instead of relying on the CLI's validate() to catch it.
-        let (baseFetch, db, tempDir, tracks) = try makeFetchTestSetup(count: 2)
+        let (baseFetch, db, tempDir, tracks) = try await makeFetchTestSetup(count: 2)
         defer { try? FileManager.default.removeItem(at: tempDir) }
 
         var fetch = baseFetch
@@ -503,7 +503,7 @@ struct FetchRunTests {
 
     @Test("does not crash with negative concurrency")
     func negativeConcurrencyDoesNotCrash() async throws {
-        let (baseFetch, db, tempDir, tracks) = try makeFetchTestSetup(count: 1)
+        let (baseFetch, db, tempDir, tracks) = try await makeFetchTestSetup(count: 1)
         defer { try? FileManager.default.removeItem(at: tempDir) }
 
         var fetch = baseFetch

@@ -48,7 +48,7 @@ struct LibraryScannerScanTests {
         let (scanner, db) = try makeScanner(musicDir: musicDir, root: root)
         try await scanner.scanLibrary()
 
-        let songs = try db.getAllSongs()
+        let songs = try await db.getAllSongs()
         #expect(songs.isEmpty)
     }
 
@@ -67,7 +67,7 @@ struct LibraryScannerScanTests {
         let (scanner, db) = try makeScanner(musicDir: musicDir, root: root)
         try await scanner.scanLibrary()
 
-        let songs = try db.getAllSongs()
+        let songs = try await db.getAllSongs()
         #expect(songs.isEmpty)
     }
 
@@ -94,11 +94,11 @@ struct LibraryScannerScanTests {
             lyrics: nil, lyricType: nil,
             lastModified: modDate.addingTimeInterval(60)
         )
-        try db.insertOrUpdateSong(preInserted)
+        try await db.insertOrUpdateSong(preInserted)
 
         try await scanner.scanLibrary()
 
-        let songs = try db.getAllSongs()
+        let songs = try await db.getAllSongs()
         #expect(songs.count == 1)
         #expect(songs.first?.title == "Pre-existing Track")
     }
@@ -120,7 +120,7 @@ struct LibraryScannerScanTests {
         // ffprobe fails on invalid content → no insertion, but scan completes without throwing
         try await scanner.scanLibrary()
 
-        let songs = try db.getAllSongs()
+        let songs = try await db.getAllSongs()
         #expect(songs.isEmpty)
     }
 
@@ -145,7 +145,7 @@ struct LibraryScannerScanTests {
             lyrics: nil, lyricType: nil,
             lastModified: Date(timeIntervalSince1970: 0)
         )
-        try db.insertOrUpdateSong(staleTrack)
+        try await db.insertOrUpdateSong(staleTrack)
 
         // Scan will try to process the file (ffprobe may fail, but what matters is
         // the file is NOT skipped — we verify by confirming the scan ran to completion)
@@ -153,7 +153,7 @@ struct LibraryScannerScanTests {
 
         // If ffprobe is unavailable or fails the old record may remain, but the scan
         // must not throw — the key assertion is that scanLibrary() completes cleanly.
-        let songs = try db.getAllSongs()
+        let songs = try await db.getAllSongs()
         #expect(songs.count >= 1)
     }
 }
@@ -559,7 +559,7 @@ struct LibraryScannerScanLibraryTests {
 
         try await scanner.scanLibrary()
 
-        let songs = try db.getAllSongs()
+        let songs = try await db.getAllSongs()
         #expect(songs.isEmpty)
     }
 
@@ -578,7 +578,7 @@ struct LibraryScannerScanLibraryTests {
 
         let failures = try await scanner.scanLibrary()
 
-        let songs = try db.getAllSongs()
+        let songs = try await db.getAllSongs()
         #expect(songs.isEmpty)
         // Compare by suffix, not exact path: macOS's temp dir (`/var/folders/...`) is a
         // symlink to `/private/var/folders/...`, and the scanner's enumerator reports the
@@ -611,7 +611,7 @@ struct LibraryScannerScanLibraryTests {
         try await scanner.scanLibrary()
 
         // No track should have been saved since every extraction failed.
-        let songs = try db.getAllSongs()
+        let songs = try await db.getAllSongs()
         #expect(songs.isEmpty)
     }
 
@@ -635,7 +635,7 @@ struct LibraryScannerScanLibraryTests {
         try await scanner.scanLibrary()
 
         // All fail (empty files), but the scan should complete without error.
-        let songs = try db.getAllSongs()
+        let songs = try await db.getAllSongs()
         #expect(songs.count == 0)
     }
 
@@ -666,13 +666,13 @@ struct LibraryScannerScanLibraryTests {
             lyricType: nil,
             lastModified: Date.distantFuture
         )
-        try db.insertOrUpdateSong(preInserted)
+        try await db.insertOrUpdateSong(preInserted)
 
         // Scan should see the file is up-to-date and skip it entirely,
         // leaving the pre-inserted record untouched.
         try await scanner.scanLibrary()
 
-        let songs = try db.getAllSongs()
+        let songs = try await db.getAllSongs()
         #expect(songs.count == 1)
         #expect(songs.first?.title == "Existing")
     }

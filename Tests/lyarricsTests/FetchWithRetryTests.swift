@@ -99,7 +99,7 @@ private func makeSong() -> Song {
 /// Constructs a `Fetch` instance with the given retry config and zero delay
 /// so tests don't actually sleep.
 private func makeFetch(maxRetries: Int = 3) -> Fetch {
-    var fetch = Fetch()
+    var fetch = Fetch.makeDefault()
     fetch.maxRetries = maxRetries
     fetch.delay = 0
     return fetch

@@ -70,7 +70,7 @@ private func makeNotFoundOutput() -> Operations.getLyrics.Output {
 }
 
 private func makeFetch() -> Fetch {
-    var fetch = Fetch()
+    var fetch = Fetch.makeDefault()
     fetch.maxRetries = 1
     fetch.delay = 0
     return fetch

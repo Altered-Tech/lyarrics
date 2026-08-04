@@ -30,7 +30,7 @@ final class LibraryScanner: @unchecked Sendable {
 
     /// - Returns: the files that failed metadata extraction during the scan, and why.
     @discardableResult
-    func scanLibrary(onProgress: ((Int, Int) -> Void)? = nil) async throws -> [ScanFailure] {
+    func scanLibrary(onProgress: (@Sendable (Int, Int) async -> Void)? = nil) async throws -> [ScanFailure] {
         logger.info("Starting library scan at \(self.musicDirectory.path)")
         let fileManager = FileManager.default
         if !fileManager.directoryExists(atPath: musicDirectory.path()) {
@@ -39,7 +39,7 @@ final class LibraryScanner: @unchecked Sendable {
         }
 
         // Pre-load all known paths and their modification dates in one query
-        let existingPaths = try database.getAllPathsAndDates()
+        let existingPaths = try await database.getAllPathsAndDates()
         logger.info("Database has \(existingPaths.count) tracked files")
 
         // Enumerate synchronously (enumerator is unavailable from async contexts)
@@ -84,7 +84,7 @@ final class LibraryScanner: @unchecked Sendable {
             // As each task finishes, collect the result and add the next task
             for try await (track, errorPath, errorReason) in group {
                 completed += 1
-                onProgress?(completed, total)
+                await onProgress?(completed, total)
                 if let track = track {
                     tracksToInsert.append(track)
                     logger.info("[\(completed)/\(total)] Done: \(track.artist) — \(track.title)")
@@ -113,7 +113,7 @@ final class LibraryScanner: @unchecked Sendable {
 
         // Batch insert all new/changed tracks in a single transaction
         logger.info("Saving \(tracksToInsert.count) tracks to database...")
-        try database.insertOrUpdateSongs(tracksToInsert)
+        try await database.insertOrUpdateSongs(tracksToInsert)
 
         logger.info("Scan complete — \(tracksToInsert.count) saved, \(errors.count) failed")
         for failure in errors {

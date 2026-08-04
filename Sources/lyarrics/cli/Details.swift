@@ -16,7 +16,7 @@ struct Details: AsyncParsableCommand {
         let database = try MusicDatabase()
 
         logger.info("Getting details")
-        guard let details: MusicDetails = try database.getMusicDetails() else {
+        guard let details: MusicDetails = try await database.getMusicDetails() else {
             print("No database details")
             return
         }
