@@ -46,14 +46,14 @@ struct MusicDatabaseTests {
     // MARK: Insert & Retrieve
 
     @Test("insertOrUpdateSong persists a track")
-    func insertAndRetrieve() throws {
+    func insertAndRetrieve() async throws {
         let (db, tempDir) = try makeTestDatabase()
         defer { try? FileManager.default.removeItem(at: tempDir) }
 
         let track = makeTrack(path: "/music/song.mp3", title: "Hello")
-        try db.insertOrUpdateSong(track)
+        try await db.insertOrUpdateSong(track)
 
-        let retrieved = try db.getSongByPath("/music/song.mp3")
+        let retrieved = try await db.getSongByPath("/music/song.mp3")
         #expect(retrieved != nil)
         #expect(retrieved?.title == "Hello")
         #expect(retrieved?.artist == "Test Artist")
@@ -62,31 +62,31 @@ struct MusicDatabaseTests {
     }
 
     @Test("getSongByPath returns nil for unknown path")
-    func getSongByPathMissing() throws {
+    func getSongByPathMissing() async throws {
         let (db, tempDir) = try makeTestDatabase()
         defer { try? FileManager.default.removeItem(at: tempDir) }
 
-        let result = try db.getSongByPath("/does/not/exist.mp3")
+        let result = try await db.getSongByPath("/does/not/exist.mp3")
         #expect(result == nil)
     }
 
     @Test("insertOrUpdateSong replaces on duplicate path")
-    func insertOrUpdateReplaces() throws {
+    func insertOrUpdateReplaces() async throws {
         let (db, tempDir) = try makeTestDatabase()
         defer { try? FileManager.default.removeItem(at: tempDir) }
 
         let original = makeTrack(path: "/music/song.mp3", title: "Original")
-        try db.insertOrUpdateSong(original)
+        try await db.insertOrUpdateSong(original)
 
         let updated = makeTrack(path: "/music/song.mp3", title: "Updated")
-        try db.insertOrUpdateSong(updated)
+        try await db.insertOrUpdateSong(updated)
 
-        let retrieved = try db.getSongByPath("/music/song.mp3")
+        let retrieved = try await db.getSongByPath("/music/song.mp3")
         #expect(retrieved?.title == "Updated")
     }
 
     @Test("insertOrUpdateSongs batch inserts multiple tracks")
-    func batchInsert() throws {
+    func batchInsert() async throws {
         let (db, tempDir) = try makeTestDatabase()
         defer { try? FileManager.default.removeItem(at: tempDir) }
 
@@ -95,45 +95,45 @@ struct MusicDatabaseTests {
             makeTrack(path: "/music/b.mp3", title: "Track B"),
             makeTrack(path: "/music/c.mp3", title: "Track C"),
         ]
-        try db.insertOrUpdateSongs(tracks)
+        try await db.insertOrUpdateSongs(tracks)
 
-        let all = try db.getAllSongs()
+        let all = try await db.getAllSongs()
         #expect(all.count == 3)
     }
 
     @Test("getAllSongs returns all inserted tracks")
-    func getAllSongs() throws {
+    func getAllSongs() async throws {
         let (db, tempDir) = try makeTestDatabase()
         defer { try? FileManager.default.removeItem(at: tempDir) }
 
-        try db.insertOrUpdateSong(makeTrack(path: "/music/a.mp3"))
-        try db.insertOrUpdateSong(makeTrack(path: "/music/b.mp3"))
+        try await db.insertOrUpdateSong(makeTrack(path: "/music/a.mp3"))
+        try await db.insertOrUpdateSong(makeTrack(path: "/music/b.mp3"))
 
-        let all = try db.getAllSongs()
+        let all = try await db.getAllSongs()
         #expect(all.count == 2)
     }
 
     @Test("getAllSongs returns empty when database is empty")
-    func getAllSongsEmpty() throws {
+    func getAllSongsEmpty() async throws {
         let (db, tempDir) = try makeTestDatabase()
         defer { try? FileManager.default.removeItem(at: tempDir) }
 
-        let all = try db.getAllSongs()
+        let all = try await db.getAllSongs()
         #expect(all.isEmpty)
     }
 
     // MARK: Lyrics Updates
 
     @Test("updateSongLyrics sets synced lyrics")
-    func updateSongLyricsSetsSynced() throws {
+    func updateSongLyricsSetsSynced() async throws {
         let (db, tempDir) = try makeTestDatabase()
         defer { try? FileManager.default.removeItem(at: tempDir) }
 
         let path = "/music/song.mp3"
-        try db.insertOrUpdateSong(makeTrack(path: path))
+        try await db.insertOrUpdateSong(makeTrack(path: path))
 
         let lyricsContent = "[00:16.41] Hello\n[00:20.00] World"
-        try db.updateSongLyrics(
+        try await db.updateSongLyrics(
             trackPath: path,
             lyricsContent: lyricsContent,
             lyricType: .synced,
@@ -141,7 +141,7 @@ struct MusicDatabaseTests {
             lyricName: "song.lrc"
         )
 
-        let updated = try db.getSongByPath(path)
+        let updated = try await db.getSongByPath(path)
         #expect(updated?.lyrics == lyricsContent)
         #expect(updated?.lyricType == .synced)
         #expect(updated?.fileLyricPath == "/music/song.lrc")
@@ -149,14 +149,14 @@ struct MusicDatabaseTests {
     }
 
     @Test("updateSongLyrics marks track as instrumental")
-    func updateSongLyricsInstrumental() throws {
+    func updateSongLyricsInstrumental() async throws {
         let (db, tempDir) = try makeTestDatabase()
         defer { try? FileManager.default.removeItem(at: tempDir) }
 
         let path = "/music/song.mp3"
-        try db.insertOrUpdateSong(makeTrack(path: path))
+        try await db.insertOrUpdateSong(makeTrack(path: path))
 
-        try db.updateSongLyrics(
+        try await db.updateSongLyrics(
             trackPath: path,
             lyricsContent: nil,
             lyricType: .instrumental,
@@ -164,7 +164,7 @@ struct MusicDatabaseTests {
             lyricName: nil
         )
 
-        let updated = try db.getSongByPath(path)
+        let updated = try await db.getSongByPath(path)
         #expect(updated?.lyricType == .instrumental)
         #expect(updated?.lyrics == nil)
     }
@@ -172,7 +172,7 @@ struct MusicDatabaseTests {
     // MARK: Songs Needing Lyrics
 
     @Test("getSongsNeedingLyrics defaults to only truly-missing tracks, excluding plain lyrics")
-    func getSongsNeedingLyricsNoSynced() throws {
+    func getSongsNeedingLyricsNoSynced() async throws {
         let (db, tempDir) = try makeTestDatabase()
         defer { try? FileManager.default.removeItem(at: tempDir) }
 
@@ -185,9 +185,9 @@ struct MusicDatabaseTests {
         // Track with instrumental music, not lyrics - should NOT appear
         let instrumentalLyrics = makeTrack(path: "/music/d.mp3", lyrics: nil, lyricType: .instrumental)
 
-        try db.insertOrUpdateSongs([noLyrics, plainLyrics, syncedLyrics, instrumentalLyrics])
+        try await db.insertOrUpdateSongs([noLyrics, plainLyrics, syncedLyrics, instrumentalLyrics])
 
-        let needing = try db.getSongsNeedingLyrics()
+        let needing = try await db.getSongsNeedingLyrics()
         let paths = needing.map(\.fileTrackPath)
         #expect(paths.contains("/music/a.mp3"))
         #expect(!paths.contains("/music/b.mp3"))
@@ -196,7 +196,7 @@ struct MusicDatabaseTests {
     }
 
     @Test("getSongsNeedingLyrics(includePlain: true) also returns plain-lyrics tracks")
-    func getSongsNeedingLyricsIncludePlain() throws {
+    func getSongsNeedingLyricsIncludePlain() async throws {
         let (db, tempDir) = try makeTestDatabase()
         defer { try? FileManager.default.removeItem(at: tempDir) }
 
@@ -204,9 +204,9 @@ struct MusicDatabaseTests {
         let plainLyrics = makeTrack(path: "/music/b.mp3", lyrics: "Hello world", lyricType: .plain)
         let syncedLyrics = makeTrack(path: "/music/c.mp3", lyrics: "[00:01.00] Hi", lyricType: .synced)
 
-        try db.insertOrUpdateSongs([noLyrics, plainLyrics, syncedLyrics])
+        try await db.insertOrUpdateSongs([noLyrics, plainLyrics, syncedLyrics])
 
-        let needing = try db.getSongsNeedingLyrics(includePlain: true)
+        let needing = try await db.getSongsNeedingLyrics(includePlain: true)
         let paths = needing.map(\.fileTrackPath)
         #expect(paths.contains("/music/a.mp3"))
         #expect(paths.contains("/music/b.mp3"))
@@ -214,19 +214,19 @@ struct MusicDatabaseTests {
     }
 
     @Test("getSongsNeedingLyrics returns empty when all tracks have synced lyrics")
-    func getSongsNeedingLyricsAllSynced() throws {
+    func getSongsNeedingLyricsAllSynced() async throws {
         let (db, tempDir) = try makeTestDatabase()
         defer { try? FileManager.default.removeItem(at: tempDir) }
 
         let synced = makeTrack(path: "/music/a.mp3", lyrics: "[00:01.00] Hi", lyricType: .synced)
-        try db.insertOrUpdateSong(synced)
+        try await db.insertOrUpdateSong(synced)
 
-        let needing = try db.getSongsNeedingLyrics()
+        let needing = try await db.getSongsNeedingLyrics()
         #expect(needing.isEmpty)
     }
 
     @Test("getSongsNeedingLyrics excludes notFound/noLyricsAvailable tracks by default")
-    func getSongsNeedingLyricsExcludesUnresolvedByDefault() throws {
+    func getSongsNeedingLyricsExcludesUnresolvedByDefault() async throws {
         // Regression test: notFound/noLyricsAvailable must not be re-queried on every
         // fetch run the way a never-attempted (nil) track is.
         let (db, tempDir) = try makeTestDatabase()
@@ -236,9 +236,9 @@ struct MusicDatabaseTests {
         let notFound = makeTrack(path: "/music/b.mp3", lyrics: nil, lyricType: .notFound)
         let noLyricsAvailable = makeTrack(path: "/music/c.mp3", lyrics: nil, lyricType: .noLyricsAvailable)
 
-        try db.insertOrUpdateSongs([neverAttempted, notFound, noLyricsAvailable])
+        try await db.insertOrUpdateSongs([neverAttempted, notFound, noLyricsAvailable])
 
-        let needing = try db.getSongsNeedingLyrics()
+        let needing = try await db.getSongsNeedingLyrics()
         let paths = needing.map(\.fileTrackPath)
         #expect(paths.contains("/music/a.mp3"))
         #expect(!paths.contains("/music/b.mp3"))
@@ -246,7 +246,7 @@ struct MusicDatabaseTests {
     }
 
     @Test("getSongsNeedingLyrics(includeUnresolved: true) also returns notFound/noLyricsAvailable tracks")
-    func getSongsNeedingLyricsIncludeUnresolved() throws {
+    func getSongsNeedingLyricsIncludeUnresolved() async throws {
         let (db, tempDir) = try makeTestDatabase()
         defer { try? FileManager.default.removeItem(at: tempDir) }
 
@@ -255,9 +255,9 @@ struct MusicDatabaseTests {
         let noLyricsAvailable = makeTrack(path: "/music/c.mp3", lyrics: nil, lyricType: .noLyricsAvailable)
         let synced = makeTrack(path: "/music/d.mp3", lyrics: "[00:01.00] Hi", lyricType: .synced)
 
-        try db.insertOrUpdateSongs([neverAttempted, notFound, noLyricsAvailable, synced])
+        try await db.insertOrUpdateSongs([neverAttempted, notFound, noLyricsAvailable, synced])
 
-        let needing = try db.getSongsNeedingLyrics(includeUnresolved: true)
+        let needing = try await db.getSongsNeedingLyrics(includeUnresolved: true)
         let paths = needing.map(\.fileTrackPath)
         #expect(paths.contains("/music/a.mp3"))
         #expect(paths.contains("/music/b.mp3"))
@@ -266,7 +266,7 @@ struct MusicDatabaseTests {
     }
 
     @Test("getSongsNeedingLyrics(includePlain: true, includeUnresolved: true) combines both")
-    func getSongsNeedingLyricsCombinedFlags() throws {
+    func getSongsNeedingLyricsCombinedFlags() async throws {
         let (db, tempDir) = try makeTestDatabase()
         defer { try? FileManager.default.removeItem(at: tempDir) }
 
@@ -274,9 +274,9 @@ struct MusicDatabaseTests {
         let notFound = makeTrack(path: "/music/b.mp3", lyrics: nil, lyricType: .notFound)
         let synced = makeTrack(path: "/music/c.mp3", lyrics: "[00:01.00] Hi", lyricType: .synced)
 
-        try db.insertOrUpdateSongs([plain, notFound, synced])
+        try await db.insertOrUpdateSongs([plain, notFound, synced])
 
-        let needing = try db.getSongsNeedingLyrics(includePlain: true, includeUnresolved: true)
+        let needing = try await db.getSongsNeedingLyrics(includePlain: true, includeUnresolved: true)
         let paths = needing.map(\.fileTrackPath)
         #expect(paths.contains("/music/a.mp3"))
         #expect(paths.contains("/music/b.mp3"))
@@ -286,11 +286,11 @@ struct MusicDatabaseTests {
     // MARK: Music Details
 
     @Test("getMusicDetails categorizes notFound/noLyricsAvailable separately from missing")
-    func getMusicDetailsCategorizesNewStates() throws {
+    func getMusicDetailsCategorizesNewStates() async throws {
         let (db, tempDir) = try makeTestDatabase()
         defer { try? FileManager.default.removeItem(at: tempDir) }
 
-        try db.insertOrUpdateSongs([
+        try await db.insertOrUpdateSongs([
             makeTrack(path: "/music/missing.mp3", lyrics: nil),
             makeTrack(path: "/music/notfound.mp3", lyrics: nil, lyricType: .notFound),
             makeTrack(path: "/music/nolyrics.mp3", lyrics: nil, lyricType: .noLyricsAvailable),
@@ -299,7 +299,7 @@ struct MusicDatabaseTests {
             makeTrack(path: "/music/instrumental.mp3", lyrics: nil, lyricType: .instrumental),
         ])
 
-        let details = try db.getMusicDetails()
+        let details = try await db.getMusicDetails()
         #expect(details?.songs == 6)
         #expect(details?.missing == 1)
         #expect(details?.notFound == 1)
@@ -315,46 +315,46 @@ struct MusicDatabaseTests {
     // MARK: Search
 
     @Test("searchLyrics returns tracks matching lyric content")
-    func searchLyricsMatch() throws {
+    func searchLyricsMatch() async throws {
         let (db, tempDir) = try makeTestDatabase()
         defer { try? FileManager.default.removeItem(at: tempDir) }
 
         let matching = makeTrack(path: "/music/a.mp3", lyrics: "Is this the real life?")
         let nonMatching = makeTrack(path: "/music/b.mp3", lyrics: "Some other lyrics")
-        try db.insertOrUpdateSongs([matching, nonMatching])
+        try await db.insertOrUpdateSongs([matching, nonMatching])
 
-        let results = try db.searchLyrics(query: "real life")
+        let results = try await db.searchLyrics(query: "real life")
         #expect(results.count == 1)
         #expect(results.first?.fileTrackPath == "/music/a.mp3")
     }
 
     @Test("searchLyrics returns empty when no match")
-    func searchLyricsNoMatch() throws {
+    func searchLyricsNoMatch() async throws {
         let (db, tempDir) = try makeTestDatabase()
         defer { try? FileManager.default.removeItem(at: tempDir) }
 
-        try db.insertOrUpdateSong(makeTrack(path: "/music/a.mp3", lyrics: "Some lyrics"))
+        try await db.insertOrUpdateSong(makeTrack(path: "/music/a.mp3", lyrics: "Some lyrics"))
 
-        let results = try db.searchLyrics(query: "xyz not found")
+        let results = try await db.searchLyrics(query: "xyz not found")
         #expect(results.isEmpty)
     }
 
     @Test("searchLyrics is case-insensitive via SQL LIKE")
-    func searchLyricsCaseSensitivity() throws {
+    func searchLyricsCaseSensitivity() async throws {
         let (db, tempDir) = try makeTestDatabase()
         defer { try? FileManager.default.removeItem(at: tempDir) }
 
-        try db.insertOrUpdateSong(makeTrack(path: "/music/a.mp3", lyrics: "Hello World"))
+        try await db.insertOrUpdateSong(makeTrack(path: "/music/a.mp3", lyrics: "Hello World"))
 
         // SQLite LIKE is case-insensitive for ASCII
-        let results = try db.searchLyrics(query: "hello world")
+        let results = try await db.searchLyrics(query: "hello world")
         #expect(results.count == 1)
     }
 
     // MARK: Paths and Dates
 
     @Test("getAllPathsAndDates returns path to date mapping")
-    func getAllPathsAndDates() throws {
+    func getAllPathsAndDates() async throws {
         let (db, tempDir) = try makeTestDatabase()
         defer { try? FileManager.default.removeItem(at: tempDir) }
 
@@ -373,36 +373,120 @@ struct MusicDatabaseTests {
             lyricType: nil,
             lastModified: now
         )
-        try db.insertOrUpdateSong(track)
+        try await db.insertOrUpdateSong(track)
 
-        let pathsAndDates = try db.getAllPathsAndDates()
+        let pathsAndDates = try await db.getAllPathsAndDates()
         #expect(pathsAndDates["/music/song.mp3"] != nil)
     }
 
     @Test("getAllPathsAndDates returns empty for empty database")
-    func getAllPathsAndDatesEmpty() throws {
+    func getAllPathsAndDatesEmpty() async throws {
         let (db, tempDir) = try makeTestDatabase()
         defer { try? FileManager.default.removeItem(at: tempDir) }
 
-        let result = try db.getAllPathsAndDates()
+        let result = try await db.getAllPathsAndDates()
         #expect(result.isEmpty)
     }
 
     // MARK: Track optional fields
 
     @Test("Track stores optional trackNumber")
-    func trackOptionalTrackNumber() throws {
+    func trackOptionalTrackNumber() async throws {
         let (db, tempDir) = try makeTestDatabase()
         defer { try? FileManager.default.removeItem(at: tempDir) }
 
         let withNumber = makeTrack(path: "/music/a.mp3", trackNumber: 5)
         let withoutNumber = makeTrack(path: "/music/b.mp3", trackNumber: nil)
-        try db.insertOrUpdateSongs([withNumber, withoutNumber])
+        try await db.insertOrUpdateSongs([withNumber, withoutNumber])
 
-        let a = try db.getSongByPath("/music/a.mp3")
-        let b = try db.getSongByPath("/music/b.mp3")
+        let a = try await db.getSongByPath("/music/a.mp3")
+        let b = try await db.getSongByPath("/music/b.mp3")
         #expect(a?.trackNumber == 5)
         #expect(b?.trackNumber == nil)
+    }
+
+    // MARK: getSongByID
+
+    @Test("getSongByID returns the matching record")
+    func getSongByIDReturnsRecord() async throws {
+        let (db, tempDir) = try makeTestDatabase()
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        try await db.insertOrUpdateSong(makeTrack(path: "/music/a.mp3", title: "Song A"))
+        let (records, _) = try await db.getSongsPaged(offset: 0, limit: 10, query: nil, filter: .all)
+        let id = try #require(records.first?.id)
+
+        let record = try await db.getSongByID(id)
+        #expect(record?.track.title == "Song A")
+    }
+
+    @Test("getSongByID returns nil for unknown id")
+    func getSongByIDMissing() async throws {
+        let (db, tempDir) = try makeTestDatabase()
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let record = try await db.getSongByID(999_999)
+        #expect(record == nil)
+    }
+
+    // MARK: getSongsPaged
+
+    @Test("getSongsPaged paginates results and reports the total")
+    func getSongsPagedPaginates() async throws {
+        let (db, tempDir) = try makeTestDatabase()
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let tracks = (0..<5).map { makeTrack(path: "/music/\($0).mp3", title: "Track \($0)") }
+        try await db.insertOrUpdateSongs(tracks)
+
+        let (firstPage, total) = try await db.getSongsPaged(offset: 0, limit: 2, query: nil, filter: .all)
+        let (secondPage, _) = try await db.getSongsPaged(offset: 2, limit: 2, query: nil, filter: .all)
+
+        #expect(total == 5)
+        #expect(firstPage.count == 2)
+        #expect(secondPage.count == 2)
+        #expect(Set(firstPage.map(\.id)).isDisjoint(with: Set(secondPage.map(\.id))))
+    }
+
+    @Test("getSongsPaged query matches title, artist, or album")
+    func getSongsPagedQueryMatches() async throws {
+        let (db, tempDir) = try makeTestDatabase()
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        try await db.insertOrUpdateSongs([
+            makeTrack(path: "/music/a.mp3", title: "Bohemian Rhapsody", artist: "Queen", album: "A Night at the Opera"),
+            makeTrack(path: "/music/b.mp3", title: "Yesterday", artist: "The Beatles", album: "Help!"),
+        ])
+
+        let byTitle = try await db.getSongsPaged(offset: 0, limit: 10, query: "Rhapsody", filter: .all)
+        let byArtist = try await db.getSongsPaged(offset: 0, limit: 10, query: "beatles", filter: .all)
+        let byAlbum = try await db.getSongsPaged(offset: 0, limit: 10, query: "Opera", filter: .all)
+        let noMatch = try await db.getSongsPaged(offset: 0, limit: 10, query: "nonexistent", filter: .all)
+
+        #expect(byTitle.records.map(\.track.title) == ["Bohemian Rhapsody"])
+        #expect(byArtist.records.map(\.track.title) == ["Yesterday"])
+        #expect(byAlbum.records.map(\.track.title) == ["Bohemian Rhapsody"])
+        #expect(noMatch.records.isEmpty)
+    }
+
+    @Test("getSongsPaged filters by missing or a specific lyric type")
+    func getSongsPagedFilters() async throws {
+        let (db, tempDir) = try makeTestDatabase()
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        try await db.insertOrUpdateSongs([
+            makeTrack(path: "/music/missing.mp3", title: "Missing", lyricType: nil),
+            makeTrack(path: "/music/synced.mp3", title: "Synced", lyrics: "[00:00.00] hi", lyricType: .synced),
+            makeTrack(path: "/music/plain.mp3", title: "Plain", lyrics: "hi", lyricType: .plain),
+        ])
+
+        let missing = try await db.getSongsPaged(offset: 0, limit: 10, query: nil, filter: .missing)
+        let synced = try await db.getSongsPaged(offset: 0, limit: 10, query: nil, filter: .type(.synced))
+        let all = try await db.getSongsPaged(offset: 0, limit: 10, query: nil, filter: .all)
+
+        #expect(missing.records.map(\.track.title) == ["Missing"])
+        #expect(synced.records.map(\.track.title) == ["Synced"])
+        #expect(all.total == 3)
     }
 }
 
@@ -412,50 +496,50 @@ struct MusicDatabaseTests {
 struct MusicDatabaseNilTests {
 
     @Test("insertOrUpdateSong is a no-op when db is nil")
-    func insertOrUpdateSongNilDB() throws {
+    func insertOrUpdateSongNilDB() async throws {
         let db = MusicDatabase(nilDatabase: ())
-        try db.insertOrUpdateSong(makeTrack())
+        try await db.insertOrUpdateSong(makeTrack())
         // No throw and no crash — guard returned early
     }
 
     @Test("insertOrUpdateSongs is a no-op when db is nil")
-    func insertOrUpdateSongsNilDB() throws {
+    func insertOrUpdateSongsNilDB() async throws {
         let db = MusicDatabase(nilDatabase: ())
-        try db.insertOrUpdateSongs([makeTrack(path: "/a.mp3"), makeTrack(path: "/b.mp3")])
+        try await db.insertOrUpdateSongs([makeTrack(path: "/a.mp3"), makeTrack(path: "/b.mp3")])
     }
 
     @Test("getAllSongs returns empty array when db is nil")
-    func getAllSongsNilDB() throws {
+    func getAllSongsNilDB() async throws {
         let db = MusicDatabase(nilDatabase: ())
-        let result = try db.getAllSongs()
+        let result = try await db.getAllSongs()
         #expect(result.isEmpty)
     }
 
     @Test("getSongByPath returns nil when db is nil")
-    func getSongByPathNilDB() throws {
+    func getSongByPathNilDB() async throws {
         let db = MusicDatabase(nilDatabase: ())
-        let result = try db.getSongByPath("/music/song.mp3")
+        let result = try await db.getSongByPath("/music/song.mp3")
         #expect(result == nil)
     }
 
     @Test("searchLyrics returns empty array when db is nil")
-    func searchLyricsNilDB() throws {
+    func searchLyricsNilDB() async throws {
         let db = MusicDatabase(nilDatabase: ())
-        let result = try db.searchLyrics(query: "hello")
+        let result = try await db.searchLyrics(query: "hello")
         #expect(result.isEmpty)
     }
 
     @Test("getSongsNeedingLyrics returns empty array when db is nil")
-    func getSongsNeedingLyricsNilDB() throws {
+    func getSongsNeedingLyricsNilDB() async throws {
         let db = MusicDatabase(nilDatabase: ())
-        let result = try db.getSongsNeedingLyrics()
+        let result = try await db.getSongsNeedingLyrics()
         #expect(result.isEmpty)
     }
 
     @Test("updateSongLyrics is a no-op when db is nil")
-    func updateSongLyricsNilDB() throws {
+    func updateSongLyricsNilDB() async throws {
         let db = MusicDatabase(nilDatabase: ())
-        try db.updateSongLyrics(
+        try await db.updateSongLyrics(
             trackPath: "/music/song.mp3",
             lyricsContent: "Hello",
             lyricType: .synced,
@@ -465,9 +549,24 @@ struct MusicDatabaseNilTests {
     }
 
     @Test("getAllPathsAndDates returns empty dictionary when db is nil")
-    func getAllPathsAndDatesNilDB() throws {
+    func getAllPathsAndDatesNilDB() async throws {
         let db = MusicDatabase(nilDatabase: ())
-        let result = try db.getAllPathsAndDates()
+        let result = try await db.getAllPathsAndDates()
         #expect(result.isEmpty)
+    }
+
+    @Test("getSongByID returns nil when db is nil")
+    func getSongByIDNilDB() async throws {
+        let db = MusicDatabase(nilDatabase: ())
+        let result = try await db.getSongByID(1)
+        #expect(result == nil)
+    }
+
+    @Test("getSongsPaged returns empty results when db is nil")
+    func getSongsPagedNilDB() async throws {
+        let db = MusicDatabase(nilDatabase: ())
+        let (records, total) = try await db.getSongsPaged(offset: 0, limit: 10, query: nil, filter: .all)
+        #expect(records.isEmpty)
+        #expect(total == 0)
     }
 }

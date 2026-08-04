@@ -2,16 +2,8 @@ import ArgumentParser
 import Testing
 @testable import lyarrics
 
-// ArgumentParser's @Option/@Flag wrappers trap at runtime ("Can't read a value from a
-// parsable argument definition") if a property is read without ever being explicitly
-// assigned, even to its own default — so every property `validate()` touches must be
-// set here, matching the convention already used by makeFetchTestSetup in FetchTestHelpers.swift.
 private func makeValidFetch() -> Fetch {
-    var fetch = Fetch()
-    fetch.maxRetries = 3
-    fetch.concurrency = 5
-    fetch.delay = 500
-    return fetch
+    Fetch.makeDefault()
 }
 
 /// Asserts `validate()` throws a `ValidationError` with exactly `expectedMessage` — not just

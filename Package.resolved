@@ -1,5 +1,5 @@
 {
-  "originHash" : "4e50519fb0b33683b73dfd0bd0039a62035908a2be744443686a129f43799587",
+  "originHash" : "1e5584e74234067f41b076bf0324ad02c8338b4bce204a0595888ffaf4fdd837",
   "pins" : [
     {
       "identity" : "async-http-client",
@@ -11,12 +11,30 @@
       }
     },
     {
+      "identity" : "elementary",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/elementary-swift/elementary.git",
+      "state" : {
+        "revision" : "b0ff5d1353308a1aead140dfed4ad4fcb4455008",
+        "version" : "0.8.0"
+      }
+    },
+    {
       "identity" : "hummingbird",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/hummingbird-project/hummingbird.git",
       "state" : {
         "revision" : "282f55d605bf9324d2da7cbebbf30112a0ae575d",
         "version" : "2.21.0"
+      }
+    },
+    {
+      "identity" : "hummingbird-elementary",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/hummingbird-community/hummingbird-elementary.git",
+      "state" : {
+        "revision" : "3b1399c6f6bca28ca3efee1904737cb3e3f6a9c8",
+        "version" : "0.5.1"
       }
     },
     {
@@ -233,15 +251,6 @@
       "state" : {
         "revision" : "ecf21fdf08d4cf30ca506bb822f5fe580e090efb",
         "version" : "1.10.4"
-      }
-    },
-    {
-      "identity" : "swift-openapi-hummingbird",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/swift-server/swift-openapi-hummingbird.git",
-      "state" : {
-        "revision" : "026b50b17e9afe74d4d82c883d9c37154a8b30bf",
-        "version" : "2.0.1"
       }
     },
     {

@@ -11,8 +11,14 @@ struct Scan: AsyncParsableCommand {
 
     private static let logger = Logger(label: "com.lyarrics.Scan")
 
-    @Argument(help: "The path to scan")
-    var path: String
+    @Argument(help: "The path to scan (defaults to $LYARRICS_MUSIC_PATH if omitted)")
+    var path: String = ProcessInfo.processInfo.environment["LYARRICS_MUSIC_PATH"] ?? ""
+
+    mutating func validate() throws {
+        guard !path.isEmpty else {
+            throw ValidationError("Provide a path to scan, or set the LYARRICS_MUSIC_PATH environment variable.")
+        }
+    }
 
     public func run() async throws {
         let logger = Self.logger

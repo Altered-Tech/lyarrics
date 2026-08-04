@@ -30,7 +30,7 @@ func makeLyarricsTrack(
 /// Creates a temp directory with a database seeded with `count` tracks whose
 /// file paths live inside the temp dir (so `.lrc` files can be written there).
 /// Returns a `Fetch` configured for serial (concurrency=1), zero-delay processing.
-func makeFetchTestSetup(count: Int = 1) throws -> (fetch: Fetch, database: MusicDatabase, tempDir: URL, tracks: [Track]) {
+func makeFetchTestSetup(count: Int = 1) async throws -> (fetch: Fetch, database: MusicDatabase, tempDir: URL, tracks: [Track]) {
     let tempDir = FileManager.default.temporaryDirectory
         .appendingPathComponent("FetchRunTests-\(UUID().uuidString)")
     try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
@@ -41,17 +41,14 @@ func makeFetchTestSetup(count: Int = 1) throws -> (fetch: Fetch, database: Music
     for i in 0..<count {
         let trackPath = tempDir.appendingPathComponent("track\(i).flac").path
         let track = makeLyarricsTrack(fileTrackPath: trackPath)
-        try db.insertOrUpdateSong(track)
+        try await db.insertOrUpdateSong(track)
         tracks.append(track)
     }
 
-    var fetch = Fetch()
+    var fetch = Fetch.makeDefault()
     fetch.delay = 0
     fetch.concurrency = 1
     fetch.maxRetries = 1
-    fetch.dryRun = false
-    fetch.scan = nil
-    fetch.limit = nil
 
     return (fetch, db, tempDir, tracks)
 }

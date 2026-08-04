@@ -93,6 +93,25 @@ struct Fetch: AsyncParsableCommand {
         }
     }
 
+    /// A `Fetch` with every property explicitly assigned its declared default — safe to read
+    /// from immediately. Plain `Fetch()` is not: ArgumentParser's `@Option`/`@Flag` wrappers only
+    /// treat a property as readable once it's been explicitly assigned post-construction, even
+    /// ones with a `= defaultValue` declaration. Reading an unassigned one throws a fatal error
+    /// that crashes the whole process, not just the caller — so any code that builds a `Fetch`
+    /// outside of CLI parsing (the web UI, tests) should start from this rather than `Fetch()`.
+    static func makeDefault() -> Fetch {
+        var fetch = Fetch()
+        fetch.dryRun = false
+        fetch.maxRetries = 3
+        fetch.delay = 500
+        fetch.concurrency = 5
+        fetch.scan = nil
+        fetch.limit = nil
+        fetch.upgradePlain = false
+        fetch.recheckUnresolved = false
+        return fetch
+    }
+
     func run() async throws {
         let logger = Self.logger
 
@@ -111,7 +130,7 @@ struct Fetch: AsyncParsableCommand {
             }
         }
 
-        var songsNeedingLyrics = try database.getSongsNeedingLyrics(includePlain: upgradePlain, includeUnresolved: recheckUnresolved)
+        var songsNeedingLyrics = try await database.getSongsNeedingLyrics(includePlain: upgradePlain, includeUnresolved: recheckUnresolved)
         if let limit {
             songsNeedingLyrics = Array(songsNeedingLyrics.prefix(limit))
         }
@@ -150,7 +169,8 @@ struct Fetch: AsyncParsableCommand {
         database: MusicDatabase,
         client: LRCLibClient,
         rateLimiter: RateLimiter,
-        logger: Logger
+        logger: Logger,
+        onProgress: (@Sendable (_ processed: Int, _ total: Int, _ fetched: Int, _ failed: Int) async -> Void)? = nil
     ) async throws -> (fetched: Int, failed: Int) {
         var fetched = 0
         var failed = 0
@@ -190,7 +210,7 @@ struct Fetch: AsyncParsableCommand {
                 case .synced(let content, let lrcURL):
                     if !dryRun {
                         try content.write(to: lrcURL, atomically: true, encoding: .utf8)
-                        try database.updateSongLyrics(
+                        try await database.updateSongLyrics(
                             trackPath: track.fileTrackPath,
                             lyricsContent: content,
                             lyricType: .synced,
@@ -205,7 +225,7 @@ struct Fetch: AsyncParsableCommand {
                 case .plain(let content, let lrcURL):
                     if !dryRun {
                         try content.write(to: lrcURL, atomically: true, encoding: .utf8)
-                        try database.updateSongLyrics(
+                        try await database.updateSongLyrics(
                             trackPath: track.fileTrackPath,
                             lyricsContent: content,
                             lyricType: .plain,
@@ -219,7 +239,7 @@ struct Fetch: AsyncParsableCommand {
 
                 case .instrumental:
                     if !dryRun {
-                        try database.updateSongLyrics(
+                        try await database.updateSongLyrics(
                             trackPath: track.fileTrackPath,
                             lyricsContent: nil,
                             lyricType: .instrumental,
@@ -233,7 +253,7 @@ struct Fetch: AsyncParsableCommand {
 
                 case .noLyrics:
                     if !dryRun {
-                        try database.updateSongLyrics(
+                        try await database.updateSongLyrics(
                             trackPath: track.fileTrackPath,
                             lyricsContent: nil,
                             lyricType: .noLyricsAvailable,
@@ -247,7 +267,7 @@ struct Fetch: AsyncParsableCommand {
 
                 case .notFound:
                     if !dryRun {
-                        try database.updateSongLyrics(
+                        try await database.updateSongLyrics(
                             trackPath: track.fileTrackPath,
                             lyricsContent: nil,
                             lyricType: .notFound,
@@ -291,6 +311,7 @@ struct Fetch: AsyncParsableCommand {
                     print(line)
                     fflush(nil)
                 }
+                await onProgress?(processed, total, fetched, failed)
 
                 // Replenish the pool as each result comes in
                 if let next = trackIterator.next() {
