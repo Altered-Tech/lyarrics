@@ -57,11 +57,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # swift-actions/setup-swift@v3 is still in beta (only release: 3.0.0-beta.1) and on
+      # macOS it downloads Swift 6.2.4 via Swiftly but fails a strict "6.2" != "6.2.4" version
+      # check, silently leaving the runner's stale default Xcode toolchain (Swift 6.1.2,
+      # predates swift-configuration's use of Data.bytes) active. v2 is the stable release and
+      # correctly treats "6.2" as a range that resolves to the latest 6.2.x patch.
       - name: Setup Swift
-        uses: swift-actions/setup-swift@v3
+        uses: swift-actions/setup-swift@v2
         with:
           swift-version: "6.2"
-          skip-verify-signature: true
 
       - name: Cache SwiftPM dependencies
         uses: actions/cache@v4
